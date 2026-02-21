@@ -20,7 +20,7 @@ tracing    = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 rand       = "0.8"
 clap       = { version = "4", features = ["derive"] }
-tss-esapi  = "7.6"
+tss-esapi  = "8.0.0-alpha.1"
 sha2       = "0.10"
 directories = "6"
 serde      = { version = "1", features = ["derive"] }

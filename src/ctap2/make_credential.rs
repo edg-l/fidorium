@@ -43,6 +43,7 @@ pub(crate) async fn handle_make_credential(
         &req.rp_id,
         req.rp_name.as_deref(),
         req.user_display.as_deref(),
+        req.user_name.as_deref(),
     );
     let proof = crate::up::require_user_presence(
         &prompt, pinentry_bin, outgoing_tx, cid, cancel,

@@ -53,7 +53,7 @@ pub fn create_seal(
         })
         .map_err(|e: tss_esapi::Error| TpmError::Seal(e.to_string()))?;
 
-    let private_bytes = result.out_private.value().to_vec();
+    let private_bytes = result.out_private.as_bytes().to_vec();
     let public_bytes = result
         .out_public
         .marshall()
@@ -88,7 +88,7 @@ pub fn unseal(
     ctx.flush_context(ObjectHandle::from(sealed_handle))
         .map_err(|e| TpmError::Seal(e.to_string()))?;
 
-    let bytes = sensitive.value();
+    let bytes = sensitive.as_bytes();
     if bytes.len() != 32 {
         return Err(TpmError::Seal(format!(
             "expected 32-byte key, got {}",

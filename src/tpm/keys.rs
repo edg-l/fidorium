@@ -11,7 +11,7 @@ use tss_esapi::handles::ObjectHandle;
 use tss_esapi::interface_types::algorithm::HashingAlgorithm;
 use tss_esapi::interface_types::algorithm::PublicAlgorithm;
 use tss_esapi::interface_types::ecc::EccCurve;
-use tss_esapi::interface_types::resource_handles::Hierarchy;
+use tss_esapi::interface_types::reserved_handles::Hierarchy;
 use tss_esapi::structures::Digest;
 use tss_esapi::structures::EccPoint;
 use tss_esapi::structures::EccScheme;
@@ -102,7 +102,7 @@ pub fn create_child_key(
         })
         .map_err(|e: tss_esapi::Error| TpmError::Key(e.to_string()))?;
 
-    let private_bytes = result.out_private.value().to_vec();
+    let private_bytes = result.out_private.as_bytes().to_vec();
     let public_bytes = result
         .out_public
         .marshall()
@@ -157,8 +157,8 @@ pub fn sign(
 
     match signature {
         Signature::EcDsa(ecc_sig) => {
-            let r = ecc_sig.signature_r().value();
-            let s = ecc_sig.signature_s().value();
+            let r = ecc_sig.signature_r().as_bytes();
+            let s = ecc_sig.signature_s().as_bytes();
             let mut result = [0u8; 64];
             let r_len = r.len().min(32);
             let s_len = s.len().min(32);
@@ -182,8 +182,8 @@ pub fn ecc_public_coords(public_bytes: &[u8]) -> Result<([u8; 32], [u8; 32]), Tp
 
     match public {
         Public::Ecc { unique, .. } => {
-            let x_bytes = unique.x().value();
-            let y_bytes = unique.y().value();
+            let x_bytes = unique.x().as_bytes();
+            let y_bytes = unique.y().as_bytes();
             let mut x = [0u8; 32];
             let mut y = [0u8; 32];
             let x_len = x_bytes.len().min(32);

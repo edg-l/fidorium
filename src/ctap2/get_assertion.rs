@@ -42,6 +42,7 @@ pub(crate) async fn handle_get_assertion(
     let prompt = crate::up::get_assertion_prompt(
         &req.rp_id,
         cred.user_display.as_deref(),
+        cred.user_name.as_deref(),
     );
     let proof = crate::up::require_user_presence(
         &prompt, pinentry_bin, outgoing_tx, cid, cancel,

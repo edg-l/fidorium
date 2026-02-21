@@ -5,7 +5,7 @@ use tss_esapi::handles::NvIndexHandle;
 use tss_esapi::handles::NvIndexTpmHandle;
 use tss_esapi::handles::TpmHandle;
 use tss_esapi::interface_types::algorithm::HashingAlgorithm;
-use tss_esapi::interface_types::resource_handles::{NvAuth, Provision};
+use tss_esapi::interface_types::reserved_handles::{NvAuth, Provision};
 use tss_esapi::structures::{CapabilityData, NvPublicBuilder};
 use super::TpmError;
 
@@ -98,7 +98,7 @@ pub fn read_counter(ctx: &mut Context, nv_index: u32) -> Result<u64, TpmError> {
         .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
 
     let bytes: [u8; 8] = buf
-        .value()
+        .as_bytes()
         .try_into()
         .map_err(|_| TpmError::Counter("counter read returned wrong size".into()))?;
 
