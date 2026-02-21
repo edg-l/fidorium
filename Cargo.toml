@@ -1,0 +1,31 @@
+[package]
+name = "fidorium"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "fidorium"
+path = "src/lib.rs"
+
+[[bin]]
+name = "fidorium"
+path = "src/main.rs"
+
+[dependencies]
+uhid-virt  = "0.0.8"
+tokio      = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time", "signal"] }
+thiserror  = "2.0"
+anyhow     = "1"
+tracing    = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+rand       = "0.8"
+clap       = { version = "4", features = ["derive"] }
+tss-esapi  = "7.6"
+sha2       = "0.10"
+directories = "6"
+serde      = { version = "1", features = ["derive"] }
+ciborium   = "0.2"
+aes-gcm    = "0.10"
+
+[dev-dependencies]
+tempfile = "3"
