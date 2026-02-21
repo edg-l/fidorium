@@ -228,6 +228,11 @@ RDEPEND="
 
 DOCS=( ARCHITECTURE.md )
 
+pkg_setup() {
+	rust_pkg_setup
+	linux-info_pkg_setup
+}
+
 src_configure() {
 	cargo_src_configure
 }
