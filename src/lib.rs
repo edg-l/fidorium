@@ -1,4 +1,5 @@
 pub mod config;
+pub mod diagnostics;
 pub mod error;
 pub mod hid;
 pub mod ctaphid;
@@ -59,6 +60,29 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
 
     tracing::info!("Starting fidorium");
 
+    // Preflight checks
+    diagnostics::check(&cfg)?;
+
+    // Compute data dir early (needed for lock fallback)
+    let data_dir = directories::ProjectDirs::from("", "", "fidorium")
+        .ok_or_else(|| anyhow::anyhow!("cannot determine XDG data dir"))?
+        .data_dir()
+        .to_path_buf();
+    std::fs::create_dir_all(&data_dir)?;
+
+    // Single-instance lock
+    let lock_dir = std::env::var("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|_| data_dir.clone());
+    let lock_path = lock_dir.join("fidorium.lock");
+    let lock_file = std::fs::OpenOptions::new()
+        .create(true)
+        .write(true)
+        .open(&lock_path)?;
+    let mut lock = fd_lock::RwLock::new(lock_file);
+    let _guard = lock.try_write()
+        .map_err(|_| anyhow::anyhow!("fidorium is already running (lock: {})", lock_path.display()))?;
+
     // Parse NV index from hex string e.g. "0x01800100"
     let nv_index = u32::from_str_radix(
         cfg.nv_index.trim_start_matches("0x"),
@@ -82,11 +106,6 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
     tracing::info!(index = format!("{nv_index:#010x}"), "NV counter ready");
 
     // Load or create seal key
-    let data_dir = directories::ProjectDirs::from("", "", "fidorium")
-        .ok_or_else(|| anyhow::anyhow!("cannot determine XDG data dir"))?
-        .data_dir()
-        .to_path_buf();
-    std::fs::create_dir_all(&data_dir)?;
     let seal_blob_path = data_dir.join("seal_key.blob");
     let aes_key = load_or_create_seal_key(&tpm, &seal_blob_path).await?;
     tracing::info!("Seal key ready");

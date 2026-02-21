@@ -75,14 +75,30 @@ pub(crate) async fn handle_get_assertion(
     ?;
 
     // Build response
-    let map = Value::Map(vec![
+    let mut entries = vec![
         (Value::Integer(1i64.into()), Value::Map(vec![
             (Value::Text("type".to_string()), Value::Text("public-key".to_string())),
             (Value::Text("id".to_string()), Value::Bytes(cred_id)),
         ])),
         (Value::Integer(2i64.into()), Value::Bytes(auth_data)),
         (Value::Integer(3i64.into()), Value::Bytes(der_sig)),
-    ]);
+    ];
+
+    // Key 0x04: user entity — required by spec for resident/discoverable credentials
+    if cred.discoverable {
+        let mut user_map = vec![
+            (Value::Text("id".to_string()), Value::Bytes(cred.user_id.clone())),
+        ];
+        if let Some(name) = &cred.user_name {
+            user_map.push((Value::Text("name".to_string()), Value::Text(name.clone())));
+        }
+        if let Some(display) = &cred.user_display {
+            user_map.push((Value::Text("displayName".to_string()), Value::Text(display.clone())));
+        }
+        entries.push((Value::Integer(4i64.into()), Value::Map(user_map)));
+    }
+
+    let map = Value::Map(entries);
 
     let mut buf = vec![0x00u8];
     ciborium::into_writer(&map, &mut buf)

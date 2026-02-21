@@ -1,0 +1,11 @@
+[Unit]
+Description=FIDO2 hardware authenticator
+After=graphical-session.target
+
+[Service]
+ExecStart=/usr/bin/fidorium -v
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,15 @@
+#!/sbin/openrc-run
+
+description="FIDO2 hardware authenticator daemon"
+command="/usr/bin/fidorium"
+command_args="${FIDORIUM_ARGS:--v}"
+command_user="${FIDORIUM_USER:-$(whoami)}"
+command_background=yes
+pidfile="/run/fidorium.pid"
+output_log="/var/log/fidorium.log"
+error_log="/var/log/fidorium.log"
+
+depend() {
+    need localmount
+    after udev
+}
