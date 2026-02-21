@@ -35,6 +35,17 @@ fn nv_index_exists(ctx: &mut Context, nv_index: u32) -> Result<bool, TpmError> {
     }
 }
 
+/// Delete NV counter if it exists. Idempotent.
+pub fn delete_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> {
+    if !nv_index_exists(ctx, nv_index)? {
+        return Ok(());
+    }
+    let handle = get_nv_handle(ctx, nv_index)?;
+    ctx.execute_with_nullauth_session(|ctx| ctx.nv_undefine_space(Provision::Owner, handle))
+        .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
+    Ok(())
+}
+
 /// Create NV counter if it doesn't exist. Idempotent.
 pub fn ensure_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> {
     if nv_index_exists(ctx, nv_index)? {
@@ -44,8 +55,8 @@ pub fn ensure_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> 
     let tpm_handle = nv_tpm_handle(nv_index)?;
     let attrs = NvIndexAttributesBuilder::new()
         .with_nv_index_type(NvIndexType::Counter)
-        .with_auth_write(true)
-        .with_auth_read(true)
+        .with_owner_write(true)
+        .with_owner_read(true)
         .with_no_da(true)
         .build()
         .map_err(|e| TpmError::Counter(e.to_string()))?;
@@ -65,7 +76,7 @@ pub fn ensure_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> 
 
     // NV counters must be incremented once to initialize before they can be read.
     let handle = get_nv_handle(ctx, nv_index)?;
-    ctx.execute_with_nullauth_session(|ctx| ctx.nv_increment(NvAuth::NvIndex(handle), handle))
+    ctx.execute_with_nullauth_session(|ctx| ctx.nv_increment(NvAuth::Owner, handle))
         .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
 
     Ok(())
@@ -74,7 +85,7 @@ pub fn ensure_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> 
 /// Increment counter and return new u64 value.
 pub fn increment_and_read(ctx: &mut Context, nv_index: u32) -> Result<u64, TpmError> {
     let handle = get_nv_handle(ctx, nv_index)?;
-    ctx.execute_with_nullauth_session(|ctx| ctx.nv_increment(NvAuth::NvIndex(handle), handle))
+    ctx.execute_with_nullauth_session(|ctx| ctx.nv_increment(NvAuth::Owner, handle))
         .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
     read_counter(ctx, nv_index)
 }
@@ -83,7 +94,7 @@ pub fn increment_and_read(ctx: &mut Context, nv_index: u32) -> Result<u64, TpmEr
 pub fn read_counter(ctx: &mut Context, nv_index: u32) -> Result<u64, TpmError> {
     let handle = get_nv_handle(ctx, nv_index)?;
     let buf = ctx
-        .execute_with_nullauth_session(|ctx| ctx.nv_read(NvAuth::NvIndex(handle), handle, 8, 0))
+        .execute_with_nullauth_session(|ctx| ctx.nv_read(NvAuth::Owner, handle, 8, 0))
         .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
 
     let bytes: [u8; 8] = buf

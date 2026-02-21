@@ -8,6 +8,43 @@ pub mod tpm;
 pub mod store;
 pub(crate) mod up;
 
+pub use up::UserPresenceProof;
+
+pub async fn wipe(cfg: config::Config) -> anyhow::Result<()> {
+    let nv_index = u32::from_str_radix(
+        cfg.nv_index.trim_start_matches("0x"),
+        16,
+    )
+    .map_err(|e| anyhow::anyhow!("invalid --nv-index: {e}"))?;
+
+    // Delete credentials
+    let data_dir = directories::ProjectDirs::from("", "", "fidorium")
+        .ok_or_else(|| anyhow::anyhow!("cannot determine XDG data dir"))?
+        .data_dir()
+        .to_path_buf();
+    let creds_dir = data_dir.join("credentials");
+    let mut count = 0usize;
+    if creds_dir.exists() {
+        for entry in std::fs::read_dir(&creds_dir)? {
+            std::fs::remove_file(entry?.path())?;
+            count += 1;
+        }
+    }
+    println!("Deleted {count} credential(s) from {}", creds_dir.display());
+
+    // Delete NV counter
+    let tpm = tpm::TpmContext::new(&cfg.tpm_device)
+        .map_err(|e| anyhow::anyhow!("Failed to initialize TPM: {e}"))?;
+    let tpm2 = tpm.clone();
+    tokio::task::spawn_blocking(move || {
+        tpm2.with_ctx(|ctx, _| tpm::counter::delete_counter(ctx, nv_index))
+    })
+    .await??;
+    println!("NV counter {nv_index:#010x} deleted (will be recreated on next start)");
+
+    Ok(())
+}
+
 pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
     use tracing_subscriber::EnvFilter;
     let level = match cfg.verbose {
@@ -57,12 +94,21 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
     // Initialize credential store
     let creds_dir = data_dir.join("credentials");
     std::fs::create_dir_all(&creds_dir)?;
-    let store = store::CredentialStore::load(aes_key, creds_dir)
-        .map_err(|e| anyhow::anyhow!("Failed to load credential store: {e}"))?;
-    tracing::info!(count = store.credential_count(), "Credential store loaded");
+    let store = std::sync::Arc::new(std::sync::Mutex::new(
+        store::CredentialStore::load(aes_key, creds_dir)
+            .map_err(|e| anyhow::anyhow!("Failed to load credential store: {e}"))?,
+    ));
+    tracing::info!(count = store.lock().unwrap().credential_count(), "Credential store loaded");
 
     let transport = hid::start_hid_transport()?;
-    ctaphid::run_ctaphid_loop(transport.incoming_rx, transport.outgoing_tx).await;
+    ctaphid::run_ctaphid_loop(
+        transport.incoming_rx,
+        transport.outgoing_tx,
+        tpm,
+        store,
+        nv_index,
+        cfg.pinentry,
+    ).await;
     match transport.task.await {
         Ok(Ok(())) => {}
         Ok(Err(e)) => return Err(anyhow::anyhow!("HID transport error: {e}")),

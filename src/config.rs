@@ -15,4 +15,7 @@ pub struct Config {
     pub nv_index: String,
     #[arg(long, default_value = "pinentry")]
     pub pinentry: String,
+    /// Delete all stored credentials and reset the TPM NV counter, then exit.
+    #[arg(long)]
+    pub wipe: bool,
 }

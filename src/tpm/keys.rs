@@ -128,11 +128,14 @@ pub fn load_key(
 
 /// Sign `data` with the loaded key.
 /// Returns raw (r, s) concatenated — 64 bytes, each component zero-padded to 32 bytes.
+/// The `_up` parameter is a user presence proof token, ensuring this function
+/// is only callable after user presence has been confirmed.
 pub fn sign(
     ctx: &mut Context,
     key: KeyHandle,
     data: &[u8],
-) -> Result<Vec<u8>, TpmError> {
+    _up: &crate::up::UserPresenceProof,
+) -> Result<[u8; 64], TpmError> {
     let hash_bytes = Sha256::digest(data);
     let digest = Digest::try_from(hash_bytes.as_slice().to_vec())
         .map_err(|e| TpmError::Key(e.to_string()))?;
@@ -156,7 +159,7 @@ pub fn sign(
         Signature::EcDsa(ecc_sig) => {
             let r = ecc_sig.signature_r().value();
             let s = ecc_sig.signature_s().value();
-            let mut result = vec![0u8; 64];
+            let mut result = [0u8; 64];
             let r_len = r.len().min(32);
             let s_len = s.len().min(32);
             result[32 - r_len..32].copy_from_slice(&r[r.len() - r_len..]);

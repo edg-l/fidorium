@@ -1,6 +1,9 @@
 use fidorium::ctaphid::{run_ctaphid_loop, types::*};
+use fidorium::store::CredentialStore;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 use tokio::time::{timeout, Duration};
+use tempfile::TempDir;
 
 fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
     let mut pkt = [0u8; 64];
@@ -14,12 +17,43 @@ fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
     pkt
 }
 
+/// Try to create a TpmContext for integration tests.
+/// Returns None if the TPM is not accessible (test should be skipped).
+fn try_make_tpm() -> Option<fidorium::tpm::TpmContext> {
+    let tcti = std::env::var("FIDORIUM_TEST_TCTI")
+        .unwrap_or_else(|_| "device:/dev/tpmrm0".into());
+    let device = tcti.trim_start_matches("device:");
+    fidorium::tpm::TpmContext::new(device).ok()
+}
+
+fn make_store(tmp: &TempDir) -> Arc<Mutex<CredentialStore>> {
+    let aes_key = [0u8; 32];
+    let creds_dir = tmp.path().to_path_buf();
+    Arc::new(Mutex::new(
+        CredentialStore::load(aes_key, creds_dir).expect("store"),
+    ))
+}
+
 #[tokio::test]
 async fn test_ctaphid_init_returns_cid() {
+    let Some(tpm) = try_make_tpm() else {
+        println!("SKIP: TPM not available");
+        return;
+    };
+    let tmp = TempDir::new().unwrap();
+    let store = make_store(&tmp);
+
     let (incoming_tx, incoming_rx) = mpsc::channel::<[u8; 64]>(16);
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<[u8; 64]>(16);
 
-    tokio::spawn(run_ctaphid_loop(incoming_rx, outgoing_tx));
+    tokio::spawn(run_ctaphid_loop(
+        incoming_rx,
+        outgoing_tx,
+        tpm,
+        store,
+        0x01800100,
+        "pinentry".to_string(),
+    ));
 
     let nonce = [0x01u8, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
     let pkt = make_init_packet(BROADCAST_CID, CMD_INIT, &nonce);
@@ -60,10 +94,24 @@ async fn test_ctaphid_init_returns_cid() {
 
 #[tokio::test]
 async fn test_ctaphid_ping_echo() {
+    let Some(tpm) = try_make_tpm() else {
+        println!("SKIP: TPM not available");
+        return;
+    };
+    let tmp = TempDir::new().unwrap();
+    let store = make_store(&tmp);
+
     let (incoming_tx, incoming_rx) = mpsc::channel::<[u8; 64]>(16);
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<[u8; 64]>(16);
 
-    tokio::spawn(run_ctaphid_loop(incoming_rx, outgoing_tx));
+    tokio::spawn(run_ctaphid_loop(
+        incoming_rx,
+        outgoing_tx,
+        tpm,
+        store,
+        0x01800100,
+        "pinentry".to_string(),
+    ));
 
     // First: INIT to get a valid CID
     let nonce = [0xAAu8; 8];
@@ -100,10 +148,24 @@ async fn test_ctaphid_ping_echo() {
 
 #[tokio::test]
 async fn test_ctaphid_invalid_cmd_returns_error() {
+    let Some(tpm) = try_make_tpm() else {
+        println!("SKIP: TPM not available");
+        return;
+    };
+    let tmp = TempDir::new().unwrap();
+    let store = make_store(&tmp);
+
     let (incoming_tx, incoming_rx) = mpsc::channel::<[u8; 64]>(16);
     let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<[u8; 64]>(16);
 
-    tokio::spawn(run_ctaphid_loop(incoming_rx, outgoing_tx));
+    tokio::spawn(run_ctaphid_loop(
+        incoming_rx,
+        outgoing_tx,
+        tpm,
+        store,
+        0x01800100,
+        "pinentry".to_string(),
+    ));
 
     // INIT first
     let nonce = [0xBBu8; 8];

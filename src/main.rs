@@ -5,5 +5,11 @@ fn main() -> anyhow::Result<()> {
     tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?
-        .block_on(fidorium::run(cfg))
+        .block_on(async {
+            if cfg.wipe {
+                fidorium::wipe(cfg).await
+            } else {
+                fidorium::run(cfg).await
+            }
+        })
 }

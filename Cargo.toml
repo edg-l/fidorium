@@ -26,6 +26,7 @@ directories = "6"
 serde      = { version = "1", features = ["derive"] }
 ciborium   = "0.2"
 aes-gcm    = "0.10"
+pinentry   = "0.5"
 
 [dev-dependencies]
 tempfile = "3"

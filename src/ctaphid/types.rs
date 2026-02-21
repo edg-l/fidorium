@@ -2,6 +2,7 @@ pub const BROADCAST_CID: u32 = 0xFFFF_FFFF;
 pub const RESERVED_CID: u32 = 0x0000_0000;
 
 pub const CMD_PING: u8 = 0x01;
+pub const CMD_MSG:  u8 = 0x03;   // legacy U2F
 pub const CMD_INIT: u8 = 0x06;
 pub const CMD_WINK: u8 = 0x08;
 pub const CMD_CBOR: u8 = 0x10;
@@ -16,6 +17,10 @@ pub const ERR_CHANNEL_BUSY: u8 = 0x06;
 pub const ERR_LOCK_REQUIRED: u8 = 0x0A;
 pub const ERR_INVALID_CHANNEL: u8 = 0x0B;
 pub const ERR_OTHER: u8 = 0x7F;
+
+// CTAP2 status codes (returned as first byte of a CMD_CBOR response payload)
+pub const CTAP2_ERR_INVALID_COMMAND:   u8 = 0x01;
+pub const CTAP2_ERR_KEEPALIVE_CANCEL:  u8 = 0x2D;
 
 pub const CAP_WINK: u8 = 0x01;
 pub const CAP_CBOR: u8 = 0x04;

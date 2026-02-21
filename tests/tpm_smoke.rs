@@ -73,10 +73,11 @@ fn test_child_key_create_load_sign() {
         .with_ctx(|ctx, primary| tpm::keys::create_child_key(ctx, primary))
         .expect("create child key");
 
+    let up = fidorium::UserPresenceProof::test_only();
     let sig = ctx
         .with_ctx(|ctx, primary| {
             let key = tpm::keys::load_key(ctx, primary, &priv_bytes, &pub_bytes)?;
-            let sig = tpm::keys::sign(ctx, key, b"hello fidorium")?;
+            let sig = tpm::keys::sign(ctx, key, b"hello fidorium", &up)?;
             tpm::keys::flush(ctx, key)?;
             Ok(sig)
         })
