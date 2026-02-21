@@ -215,7 +215,6 @@ ERROR_UHID="fidorium requires CONFIG_UHID (Virtual HID devices) to be enabled in
 BDEPEND="
 	llvm-core/clang
 	virtual/pkgconfig
-	virtual/rust
 "
 
 DEPEND="
