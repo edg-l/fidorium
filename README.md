@@ -1,5 +1,7 @@
 # fidorium
 
+<p align="center"><img src="logo.svg" width="180" alt="fidorium logo"/></p>
+
 A FIDO2/CTAP2 authenticator daemon for Linux. It presents as a virtual USB HID authenticator via `/dev/uhid`, backed by TPM 2.0 for key storage. Supports passkey registration (MakeCredential) and authentication (GetAssertion). User presence is confirmed via a pinentry popup.
 
 ## Requirements

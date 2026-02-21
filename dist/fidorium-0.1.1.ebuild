@@ -195,9 +195,9 @@ CRATES="
 inherit cargo linux-info optfeature systemd
 
 DESCRIPTION="FIDO2/CTAP2 hardware authenticator daemon backed by TPM2"
-HOMEPAGE="https://github.com/edgar/fidorium"
+HOMEPAGE="https://github.com/edg-l/fidorium"
 SRC_URI="
-	https://github.com/edgar/fidorium/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz
+	https://github.com/edg-l/fidorium/archive/refs/tags/v${PV}.tar.gz -> ${P}.tar.gz
 	${CARGO_CRATE_URIS}
 "
 

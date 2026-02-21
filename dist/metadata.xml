@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+  <maintainer type="person">
+    <name>Edgar</name>
+  </maintainer>
+  <longdescription>
+    Fidorium is a FIDO2/CTAP2 software authenticator daemon for Linux.
+    It presents a virtual HID device via /dev/uhid and backs all
+    cryptographic operations (key generation, signing, monotonic counter)
+    with a TPM2 chip. User presence is confirmed via pinentry.
+  </longdescription>
+  <use>
+    <flag name="systemd">Install systemd user service unit</flag>
+  </use>
+  <upstream>
+    <remote-id type="github">edgar/fidorium</remote-id>
+  </upstream>
+</pkgmetadata>
