@@ -4,9 +4,9 @@ description="FIDO2 hardware authenticator daemon"
 command="/usr/bin/fidorium"
 command_args="${FIDORIUM_ARGS:--v}"
 command_background=yes
-pidfile="/run/fidorium.pid"
-output_log="/var/log/fidorium.log"
-error_log="/var/log/fidorium.log"
+pidfile="${XDG_RUNTIME_DIR}/fidorium.pid"
+output_log="${XDG_RUNTIME_DIR}/fidorium.log"
+error_log="${XDG_RUNTIME_DIR}/fidorium.log"
 
 depend() {
     after udev
