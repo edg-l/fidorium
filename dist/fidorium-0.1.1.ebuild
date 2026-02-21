@@ -192,7 +192,7 @@ CRATES="
 	zmij-1.0.21
 "
 
-inherit cargo linux-info optfeature systemd
+inherit cargo linux-info optfeature systemd udev
 
 DESCRIPTION="FIDO2/CTAP2 hardware authenticator daemon backed by TPM2"
 HOMEPAGE="https://github.com/edg-l/fidorium"
