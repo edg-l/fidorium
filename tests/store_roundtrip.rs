@@ -96,3 +96,66 @@ fn test_store_remove() {
     let store2 = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
     assert_eq!(store2.credential_count(), 0);
 }
+
+#[test]
+fn test_store_wrong_key_skips_file() {
+    // Write with key A, reload with key B — AES-GCM auth tag fails so file is skipped.
+    let dir = tempfile::tempdir().unwrap();
+    let key_a = [0x11u8; 32];
+    let key_b = [0x22u8; 32];
+    let cred_id = [0x55u8; 32];
+
+    let mut store = CredentialStore::load(key_a, dir.path().to_path_buf()).unwrap();
+    store.add(make_record("wrong-key.example", b"user", &cred_id, 1_000)).unwrap();
+    drop(store);
+
+    // Reload with wrong key — corrupt file should be silently skipped
+    let store2 = CredentialStore::load(key_b, dir.path().to_path_buf()).unwrap();
+    assert_eq!(store2.credential_count(), 0, "corrupt (wrong-key) file must be skipped");
+}
+
+#[test]
+fn test_store_skips_truncated_bin_file() {
+    // A .bin file shorter than the 12-byte nonce prefix should be skipped.
+    let dir = tempfile::tempdir().unwrap();
+    let key = [0xAAu8; 32];
+
+    // Write a too-short .bin file directly
+    let short_path = dir.path().join("deadbeef.bin");
+    std::fs::write(&short_path, b"short").unwrap();
+
+    let store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
+    assert_eq!(store.credential_count(), 0, "truncated .bin file must be skipped");
+}
+
+#[test]
+fn test_store_skips_non_bin_files() {
+    // Non-.bin files in the credentials directory must be ignored.
+    let dir = tempfile::tempdir().unwrap();
+    let key = [0xBBu8; 32];
+
+    std::fs::write(dir.path().join("notes.txt"), b"ignore me").unwrap();
+    std::fs::write(dir.path().join("backup.json"), b"{}").unwrap();
+
+    let store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
+    assert_eq!(store.credential_count(), 0, "non-.bin files must be ignored");
+}
+
+#[test]
+fn test_store_corrupt_bin_file_does_not_affect_valid_ones() {
+    // A corrupt file is skipped but valid credentials in the same directory still load.
+    let dir = tempfile::tempdir().unwrap();
+    let key = [0xCCu8; 32];
+    let cred_id = [0x77u8; 32];
+
+    let mut store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
+    store.add(make_record("good.example", b"user", &cred_id, 2_000)).unwrap();
+    drop(store);
+
+    // Drop a garbage .bin file alongside the valid one
+    std::fs::write(dir.path().join("garbage.bin"), b"not encrypted").unwrap();
+
+    let store2 = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
+    assert_eq!(store2.credential_count(), 1, "valid credential must still load despite corrupt neighbour");
+    assert!(store2.get_by_id(&cred_id).is_some());
+}

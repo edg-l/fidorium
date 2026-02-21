@@ -34,6 +34,7 @@ impl Ctap2Error {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct MakeCredentialRequest {
     pub client_data_hash: Vec<u8>,
     pub rp_id:            String,
@@ -46,6 +47,7 @@ pub(crate) struct MakeCredentialRequest {
     pub alg_ok:           bool,  // true if -7 (ES256) is in pubKeyCredParams
 }
 
+#[derive(Debug)]
 pub(crate) struct GetAssertionRequest {
     pub rp_id:            String,
     pub client_data_hash: Vec<u8>,
@@ -142,8 +144,8 @@ impl TryFrom<&[u8]> for MakeCredentialRequest {
             false
         };
 
-        // 6: excludeList
-        let exclude_list = if let Some(excl_val) = cbor_get(&map, 6) {
+        // 5: excludeList
+        let exclude_list = if let Some(excl_val) = cbor_get(&map, 5) {
             cbor_array(excl_val).map_or(vec![], |arr| {
                 arr.iter()
                     .filter_map(|item| {
@@ -214,5 +216,215 @@ impl TryFrom<&[u8]> for GetAssertionRequest {
         };
 
         Ok(GetAssertionRequest { rp_id, client_data_hash, allow_list })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ---- helpers ----
+
+    fn bv(b: &[u8]) -> Value { Value::Bytes(b.to_vec()) }
+    fn tv(s: &str)  -> Value { Value::Text(s.to_string()) }
+    fn iv(i: i64)   -> Value { Value::Integer(i.into()) }
+    fn mv(v: Vec<(Value, Value)>) -> Value { Value::Map(v) }
+    fn av(v: Vec<Value>)          -> Value { Value::Array(v) }
+
+    fn encode(v: Value) -> Vec<u8> {
+        let mut buf = Vec::new();
+        ciborium::into_writer(&v, &mut buf).unwrap();
+        buf
+    }
+
+    /// Minimal valid MakeCredential body with all required fields.
+    fn make_cred_minimal() -> Vec<u8> {
+        encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),                                      // clientDataHash
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),             // rp
+            (iv(3), mv(vec![(tv("id"), bv(b"user1"))])),                  // user
+            (iv(4), av(vec![mv(vec![                                       // pubKeyCredParams
+                (tv("alg"), iv(-7)),
+                (tv("type"), tv("public-key")),
+            ])])),
+        ]))
+    }
+
+    /// Minimal valid GetAssertion body.
+    fn get_assertion_minimal() -> Vec<u8> {
+        encode(mv(vec![
+            (iv(1), tv("example.com")),   // rpId
+            (iv(2), bv(&[0u8; 32])),      // clientDataHash
+        ]))
+    }
+
+    // ---- MakeCredentialRequest parsing ----
+
+    #[test]
+    fn test_make_cred_minimal_valid() {
+        let req = MakeCredentialRequest::try_from(make_cred_minimal().as_slice()).unwrap();
+        assert_eq!(req.rp_id, "example.com");
+        assert_eq!(req.client_data_hash, vec![0u8; 32]);
+        assert_eq!(req.user_id, b"user1");
+        assert!(req.alg_ok);
+        assert!(!req.resident_key);
+        assert!(req.exclude_list.is_empty());
+    }
+
+    #[test]
+    fn test_make_cred_missing_client_data_hash() {
+        let cbor = encode(mv(vec![
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+        ]));
+        let err = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_make_cred_missing_rp() {
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+        ]));
+        let err = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_make_cred_rp_missing_id_field() {
+        // rp map present but has no "id" key
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(2), mv(vec![(tv("name"), tv("Example"))])),   // no "id"
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+        ]));
+        let err = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_make_cred_missing_user() {
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),
+        ]));
+        let err = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_make_cred_alg_ok_false_when_only_rs256() {
+        // pubKeyCredParams contains only RS256 (alg=-257), not ES256
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+            (iv(4), av(vec![mv(vec![
+                (tv("alg"), iv(-257)),
+                (tv("type"), tv("public-key")),
+            ])])),
+        ]));
+        let req = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap();
+        assert!(!req.alg_ok, "alg_ok must be false when ES256 is absent");
+    }
+
+    #[test]
+    fn test_make_cred_resident_key_true() {
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+            (iv(4), av(vec![mv(vec![(tv("alg"), iv(-7))])])),
+            (iv(7), mv(vec![(tv("rk"), Value::Bool(true))])),   // options
+        ]));
+        let req = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap();
+        assert!(req.resident_key);
+    }
+
+    #[test]
+    fn test_make_cred_exclude_list_parsed_from_key_5() {
+        let cred_id = vec![0xAAu8; 32];
+        let cbor = encode(mv(vec![
+            (iv(1), bv(&[0u8; 32])),
+            (iv(2), mv(vec![(tv("id"), tv("example.com"))])),
+            (iv(3), mv(vec![(tv("id"), bv(b"u"))])),
+            (iv(4), av(vec![mv(vec![(tv("alg"), iv(-7))])])),
+            (iv(5), av(vec![mv(vec![       // key 5 per CTAP2 spec
+                (tv("type"), tv("public-key")),
+                (tv("id"), bv(&cred_id)),
+            ])])),
+        ]));
+        let req = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap();
+        assert_eq!(req.exclude_list.len(), 1);
+        assert_eq!(req.exclude_list[0], cred_id);
+    }
+
+    #[test]
+    fn test_make_cred_malformed_cbor() {
+        let err = MakeCredentialRequest::try_from(b"\xff\xff".as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::Cbor(_)));
+    }
+
+    #[test]
+    fn test_make_cred_cbor_not_a_map() {
+        // CBOR array instead of map
+        let cbor = encode(av(vec![iv(1), iv(2)]));
+        let err = MakeCredentialRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::Cbor(_)));
+    }
+
+    // ---- GetAssertionRequest parsing ----
+
+    #[test]
+    fn test_get_assertion_minimal_valid() {
+        let req = GetAssertionRequest::try_from(get_assertion_minimal().as_slice()).unwrap();
+        assert_eq!(req.rp_id, "example.com");
+        assert_eq!(req.client_data_hash, vec![0u8; 32]);
+        assert!(req.allow_list.is_empty());
+    }
+
+    #[test]
+    fn test_get_assertion_missing_rp_id() {
+        let cbor = encode(mv(vec![(iv(2), bv(&[0u8; 32]))]));
+        let err = GetAssertionRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_get_assertion_missing_client_data_hash() {
+        let cbor = encode(mv(vec![(iv(1), tv("example.com"))]));
+        let err = GetAssertionRequest::try_from(cbor.as_slice()).unwrap_err();
+        assert!(matches!(err, Ctap2Error::MissingParameter));
+    }
+
+    #[test]
+    fn test_get_assertion_allow_list_parsed() {
+        let cred_id = vec![0x11u8; 32];
+        let cbor = encode(mv(vec![
+            (iv(1), tv("example.com")),
+            (iv(2), bv(&[0u8; 32])),
+            (iv(3), av(vec![mv(vec![       // allowList
+                (tv("type"), tv("public-key")),
+                (tv("id"), bv(&cred_id)),
+            ])])),
+        ]));
+        let req = GetAssertionRequest::try_from(cbor.as_slice()).unwrap();
+        assert_eq!(req.allow_list.len(), 1);
+        assert_eq!(req.allow_list[0], cred_id);
+    }
+
+    // ---- Ctap2Error::status_byte ----
+
+    #[test]
+    fn test_status_byte_mapping() {
+        assert_eq!(Ctap2Error::MissingParameter.status_byte(),    0x14);
+        assert_eq!(Ctap2Error::UnsupportedAlgorithm.status_byte(), 0x26);
+        assert_eq!(Ctap2Error::CredentialExcluded.status_byte(),  0x19);
+        assert_eq!(Ctap2Error::OperationDenied.status_byte(),     0x27);
+        assert_eq!(Ctap2Error::UserActionTimeout.status_byte(),   0x2A);
+        assert_eq!(Ctap2Error::KeepaliveCancel.status_byte(),     0x2D);
+        assert_eq!(Ctap2Error::NoCredentials.status_byte(),       0x2E);
+        assert_eq!(Ctap2Error::Cbor("x".into()).status_byte(),    0x11);
     }
 }
