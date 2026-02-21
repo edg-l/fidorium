@@ -9,6 +9,5 @@ output_log="/var/log/fidorium.log"
 error_log="/var/log/fidorium.log"
 
 depend() {
-    need localmount
     after udev
 }
