@@ -15,8 +15,8 @@ depend() {
 start_pre() {
     local pid dbus
     for pid in $(pgrep -u "$(id -un)" 2>/dev/null); do
-        dbus=$(tr '\0' '\n' < /proc/${pid}/environ 2>/dev/null \
-            | grep "^DBUS_SESSION_BUS_ADDRESS=" | cut -d= -f2-)
+        dbus=$(cat /proc/${pid}/environ 2>/dev/null \
+            | tr '\0' '\n' | grep "^DBUS_SESSION_BUS_ADDRESS=" | cut -d= -f2-)
         if [ -n "$dbus" ]; then
             export DBUS_SESSION_BUS_ADDRESS="${dbus}"
             break
