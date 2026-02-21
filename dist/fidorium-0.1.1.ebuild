@@ -248,7 +248,7 @@ src_install() {
 	udev_dorules dist/99-fidorium.rules
 
 	# OpenRC init script + conf.d
-	doinitd dist/fidorium.initd
+	newinitd dist/fidorium.initd fidorium
 	newconfd dist/fidorium.confd fidorium
 
 	# systemd user service (installed system-wide; users enable per-session)
