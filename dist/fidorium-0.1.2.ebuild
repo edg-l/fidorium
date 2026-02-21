@@ -247,9 +247,13 @@ src_install() {
 	# udev rule for /dev/uhid access
 	udev_dorules dist/99-fidorium.rules
 
-	# OpenRC init script + conf.d
-	newinitd dist/fidorium.initd fidorium
-	newconfd dist/fidorium.confd fidorium
+	# OpenRC user init script + conf.d
+	insinto /etc/user/init.d
+	insopts -m0755
+	newins dist/fidorium.initd fidorium
+	insinto /etc/user/conf.d
+	insopts -m0644
+	newins dist/fidorium.confd fidorium
 
 	# systemd user service (installed system-wide; users enable per-session)
 	systemd_douserunit dist/fidorium.service
@@ -274,6 +278,6 @@ pkg_postinst() {
 	optfeature "Qt pinentry dialog" \
 		"app-crypt/pinentry[qt5]"
 	elog ""
-	elog "OpenRC: rc-update add fidorium default && rc-service fidorium start"
+	elog "OpenRC: rc-update --user add fidorium && rc-service --user fidorium start"
 	elog "systemd: systemctl --user enable --now fidorium"
 }
