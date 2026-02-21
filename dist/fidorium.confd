@@ -1,5 +1,2 @@
-# User to run fidorium as
-FIDORIUM_USER="edgar"
-
 # Extra arguments (e.g. --tpm-device /dev/tpmrm0 --pinentry pinentry-curses)
 FIDORIUM_ARGS="-v"
