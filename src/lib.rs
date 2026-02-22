@@ -75,6 +75,7 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
     let lock_file = std::fs::OpenOptions::new()
         .create(true)
         .write(true)
+        .truncate(false)
         .open(&lock_path)?;
     let mut lock = fd_lock::RwLock::new(lock_file);
     let _guard = lock.try_write().map_err(|_| {
@@ -164,10 +165,8 @@ async fn load_or_create_seal_key(
         Ok(key)
     } else {
         let tpm2 = tpm.clone();
-        let (private_bytes, public_bytes, key) = tokio::task::spawn_blocking(move || {
-            tpm2.with_ctx(|ctx, primary| tpm::seal::create_seal(ctx, primary))
-        })
-        .await??;
+        let (private_bytes, public_bytes, key) =
+            tokio::task::spawn_blocking(move || tpm2.with_ctx(tpm::seal::create_seal)).await??;
 
         let private_len = private_bytes.len() as u32;
         let mut blob = Vec::with_capacity(4 + private_bytes.len() + public_bytes.len());

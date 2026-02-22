@@ -157,10 +157,10 @@ mod tests {
 
         let get = |key: i64| -> Option<&Value> {
             map.iter().find_map(|(k, v)| {
-                if let Value::Integer(i) = k {
-                    if i128::from(*i) == key as i128 {
-                        return Some(v);
-                    }
+                if let Value::Integer(i) = k
+                    && i128::from(*i) == key as i128
+                {
+                    return Some(v);
                 }
                 None
             })

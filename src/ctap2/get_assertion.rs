@@ -30,6 +30,7 @@ fn select_credential(
     found.cloned()
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_get_assertion(
     req: GetAssertionRequest,
     tpm: &TpmContext,

@@ -18,10 +18,9 @@ use tss_esapi::traits::UnMarshall;
 
 /// Create a sealed object wrapping a random 32-byte key.
 /// Returns (private_blob, public_blob, key_plaintext).
-pub fn create_seal(
-    ctx: &mut Context,
-    primary: KeyHandle,
-) -> Result<(Vec<u8>, Vec<u8>, [u8; 32]), TpmError> {
+pub type SealCreation = (Vec<u8>, Vec<u8>, [u8; 32]);
+
+pub fn create_seal(ctx: &mut Context, primary: KeyHandle) -> Result<SealCreation, TpmError> {
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
 

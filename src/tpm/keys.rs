@@ -133,9 +133,8 @@ pub fn sign(
     data: &[u8],
     _up: &crate::up::UserPresenceProof,
 ) -> Result<[u8; 64], TpmError> {
-    let hash_bytes = Sha256::digest(data);
-    let digest = Digest::try_from(hash_bytes.as_slice().to_vec())
-        .map_err(|e| TpmError::Key(e.to_string()))?;
+    let hash_bytes: [u8; 32] = Sha256::digest(data).into();
+    let digest = Digest::try_from(hash_bytes.to_vec()).map_err(|e| TpmError::Key(e.to_string()))?;
 
     let raw_ticket = TPMT_TK_HASHCHECK {
         tag: TPM2_ST_HASHCHECK,

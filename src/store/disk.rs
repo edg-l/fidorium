@@ -1,5 +1,5 @@
 use aes_gcm::aead::Aead;
-use aes_gcm::{Aes256Gcm, KeyInit, Nonce};
+use aes_gcm::{Aes256Gcm, KeyInit};
 use rand::RngCore;
 use std::path::Path;
 
@@ -20,8 +20,9 @@ pub(crate) fn write_credential(
 
     let cipher =
         Aes256Gcm::new_from_slice(aes_key).map_err(|e| StoreError::Encryption(e.to_string()))?;
+    let nonce = nonce_bytes.into();
     let ciphertext = cipher
-        .encrypt(Nonce::from_slice(&nonce_bytes), buf.as_slice())
+        .encrypt(&nonce, buf.as_slice())
         .map_err(|e| StoreError::Encryption(e.to_string()))?;
 
     let hex: String = record
@@ -49,11 +50,15 @@ pub(crate) fn read_credential(
         return Err(StoreError::Corrupt("file too short".into()));
     }
     let (nonce_bytes, ciphertext) = bytes.split_at(12);
+    let nonce_bytes: [u8; 12] = nonce_bytes
+        .try_into()
+        .map_err(|_| StoreError::Corrupt("invalid nonce length".into()))?;
 
     let cipher =
         Aes256Gcm::new_from_slice(aes_key).map_err(|e| StoreError::Encryption(e.to_string()))?;
+    let nonce = nonce_bytes.into();
     let plaintext = cipher
-        .decrypt(Nonce::from_slice(nonce_bytes), ciphertext)
+        .decrypt(&nonce, ciphertext)
         .map_err(|e| StoreError::Encryption(e.to_string()))?;
 
     let record: CredentialRecord = ciborium::from_reader(plaintext.as_slice())

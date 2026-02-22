@@ -77,7 +77,7 @@ pub(crate) fn parse_cbor(data: &[u8]) -> Result<Vec<(Value, Value)>, Ctap2Error>
     }
 }
 
-pub(crate) fn cbor_get<'a>(map: &'a [(Value, Value)], key: i64) -> Option<&'a Value> {
+pub(crate) fn cbor_get(map: &[(Value, Value)], key: i64) -> Option<&Value> {
     let target = Value::Integer(key.into());
     map.iter().find(|(k, _)| k == &target).map(|(_, v)| v)
 }
@@ -162,11 +162,10 @@ impl TryFrom<&[u8]> for MakeCredentialRequest {
 
         // 4: pubKeyCredParams — check for alg=-7
         let alg_ok = if let Some(params_val) = cbor_get(&map, 4) {
-            cbor_array(params_val).map_or(false, |arr| {
+            cbor_array(params_val).is_some_and(|arr| {
                 arr.iter().any(|item| {
-                    cbor_map(item).map_or(false, |m| {
-                        cbor_get_str(m, "alg")
-                            .map_or(false, |v| v == &Value::Integer((-7i64).into()))
+                    cbor_map(item).is_some_and(|m| {
+                        cbor_get_str(m, "alg").is_some_and(|v| v == &Value::Integer((-7i64).into()))
                     })
                 })
             })

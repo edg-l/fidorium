@@ -10,6 +10,7 @@ use super::types::{Ctap2Error, MakeCredentialRequest};
 use crate::store::{CredentialRecord, CredentialStore};
 use crate::tpm::{self, TpmContext};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) async fn handle_make_credential(
     req: MakeCredentialRequest,
     tpm: &TpmContext,
@@ -30,10 +31,10 @@ pub(crate) async fn handle_make_credential(
     {
         let guard = store.lock().unwrap();
         for exc_id in &req.exclude_list {
-            if let Some(cred) = guard.get_by_id(exc_id) {
-                if cred.rp_id_hash == rp_id_hash.as_slice() {
-                    return Err(Ctap2Error::CredentialExcluded);
-                }
+            if let Some(cred) = guard.get_by_id(exc_id)
+                && cred.rp_id_hash == rp_id_hash.as_slice()
+            {
+                return Err(Ctap2Error::CredentialExcluded);
             }
         }
     }

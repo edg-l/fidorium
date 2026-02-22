@@ -23,12 +23,12 @@ fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
     pkt
 }
 
-fn cbor_map_get<'a>(map: &'a [(Value, Value)], key: i64) -> Option<&'a Value> {
+fn cbor_map_get(map: &[(Value, Value)], key: i64) -> Option<&Value> {
     map.iter().find_map(|(k, v)| {
-        if let Value::Integer(i) = k {
-            if i128::from(*i) == key as i128 {
-                return Some(v);
-            }
+        if let Value::Integer(i) = k
+            && i128::from(*i) == key as i128
+        {
+            return Some(v);
         }
         None
     })
@@ -189,10 +189,10 @@ async fn test_get_info_options() {
 
     let get_bool = |key: &str| -> Option<bool> {
         opts.iter().find_map(|(k, v)| {
-            if let (Value::Text(k), Value::Bool(b)) = (k, v) {
-                if k == key {
-                    return Some(*b);
-                }
+            if let (Value::Text(k), Value::Bool(b)) = (k, v)
+                && k == key
+            {
+                return Some(*b);
             }
             None
         })

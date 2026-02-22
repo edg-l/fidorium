@@ -34,10 +34,10 @@ fn test_primary_key_is_deterministic() {
 
     // Create child keys under each primary; both should succeed.
     let (priv1, pub1) = ctx1
-        .with_ctx(|ctx, primary| tpm::keys::create_child_key(ctx, primary))
+        .with_ctx(tpm::keys::create_child_key)
         .expect("create child key on ctx1");
     let (priv2, pub2) = ctx2
-        .with_ctx(|ctx, primary| tpm::keys::create_child_key(ctx, primary))
+        .with_ctx(tpm::keys::create_child_key)
         .expect("create child key on ctx2");
 
     // Serialized public keys for child keys will differ (random), but
@@ -67,7 +67,7 @@ fn test_child_key_create_load_sign() {
     let ctx = make_context(&tcti);
 
     let (priv_bytes, pub_bytes) = ctx
-        .with_ctx(|ctx, primary| tpm::keys::create_child_key(ctx, primary))
+        .with_ctx(tpm::keys::create_child_key)
         .expect("create child key");
 
     let up = fidorium::UserPresenceProof::test_only();
@@ -122,9 +122,7 @@ fn test_seal_unseal_roundtrip() {
     let Some(tcti) = test_tcti() else { return };
     let ctx = make_context(&tcti);
 
-    let (priv_bytes, pub_bytes, key) = ctx
-        .with_ctx(|ctx, primary| tpm::seal::create_seal(ctx, primary))
-        .expect("create_seal");
+    let (priv_bytes, pub_bytes, key) = ctx.with_ctx(tpm::seal::create_seal).expect("create_seal");
 
     let recovered = ctx
         .with_ctx(|ctx, primary| tpm::seal::unseal(ctx, primary, &priv_bytes, &pub_bytes))
