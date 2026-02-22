@@ -2,7 +2,14 @@
 name = "fidorium"
 version = "0.1.6"
 edition = "2024"
+description = "A FIDO2/CTAP2 authenticator daemon for Linux backed by TPM 2.0"
 license = "MIT OR Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/edg-l/fidorium"
+homepage = "https://github.com/edg-l/fidorium"
+documentation = "https://docs.rs/fidorium"
+categories = ["authentication", "cryptography", "command-line-utilities", "os::linux-apis"]
+keywords = ["fido2", "ctap2", "webauthn", "tpm2", "linux"]
 
 [lib]
 name = "fidorium"
