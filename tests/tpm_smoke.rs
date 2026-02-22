@@ -1,8 +1,7 @@
 use fidorium::tpm;
 
 fn test_tcti() -> Option<String> {
-    let s = std::env::var("FIDORIUM_TEST_TCTI")
-        .unwrap_or_else(|_| "device:/dev/tpmrm0".into());
+    let s = std::env::var("FIDORIUM_TEST_TCTI").unwrap_or_else(|_| "device:/dev/tpmrm0".into());
     // Probe: try to create a context; if it fails, skip the test.
     let tcti: tss_esapi::TctiNameConf = match s.parse() {
         Ok(v) => v,
@@ -21,10 +20,8 @@ fn test_tcti() -> Option<String> {
 }
 
 fn make_context(tcti: &str) -> fidorium::tpm::TpmContext {
-    fidorium::tpm::TpmContext::new(
-        tcti.trim_start_matches("device:"),
-    )
-    .expect("TpmContext::new should succeed")
+    fidorium::tpm::TpmContext::new(tcti.trim_start_matches("device:"))
+        .expect("TpmContext::new should succeed")
 }
 
 #[test]

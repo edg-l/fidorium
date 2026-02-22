@@ -1,14 +1,14 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::AtomicBool;
-use tokio::sync::mpsc;
 use rand::Rng;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
 
-use crate::tpm::{self, TpmContext};
-use crate::store::{CredentialRecord, CredentialStore};
-use super::types::{MakeCredentialRequest, Ctap2Error};
-use super::authenticator_data::{build_make_cred_auth_data, encode_der_ecdsa};
 use super::attestation::build_attestation_object;
+use super::authenticator_data::{build_make_cred_auth_data, encode_der_ecdsa};
+use super::types::{Ctap2Error, MakeCredentialRequest};
+use crate::store::{CredentialRecord, CredentialStore};
+use crate::tpm::{self, TpmContext};
 
 pub(crate) async fn handle_make_credential(
     req: MakeCredentialRequest,
@@ -45,9 +45,8 @@ pub(crate) async fn handle_make_credential(
         req.user_display.as_deref(),
         req.user_name.as_deref(),
     );
-    let proof = crate::up::require_user_presence(
-        &prompt, pinentry_bin, outgoing_tx, cid, cancel,
-    ).await?;
+    let proof =
+        crate::up::require_user_presence(&prompt, pinentry_bin, outgoing_tx, cid, cancel).await?;
     tracing::info!(cid = format!("{cid:#010x}"), "User presence confirmed");
 
     // 4. Generate credential ID
@@ -74,8 +73,7 @@ pub(crate) async fn handle_make_credential(
             })
         })
         .await
-        .map_err(|e| Ctap2Error::Tpm(tpm::TpmError::Other(e.to_string())))?
-        ?;
+        .map_err(|e| Ctap2Error::Tpm(tpm::TpmError::Other(e.to_string())))??;
 
     let der_sig = encode_der_ecdsa(&raw_sig);
 

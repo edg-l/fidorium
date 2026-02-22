@@ -1,3 +1,4 @@
+use super::TpmError;
 use tss_esapi::Context;
 use tss_esapi::attributes::NvIndexAttributesBuilder;
 use tss_esapi::constants::{CapabilityType, NvIndexType};
@@ -7,11 +8,9 @@ use tss_esapi::handles::TpmHandle;
 use tss_esapi::interface_types::algorithm::HashingAlgorithm;
 use tss_esapi::interface_types::reserved_handles::{NvAuth, Provision};
 use tss_esapi::structures::{CapabilityData, NvPublicBuilder};
-use super::TpmError;
 
 fn nv_tpm_handle(nv_index: u32) -> Result<NvIndexTpmHandle, TpmError> {
-    NvIndexTpmHandle::new(nv_index)
-        .map_err(|e| TpmError::Counter(e.to_string()))
+    NvIndexTpmHandle::new(nv_index).map_err(|e| TpmError::Counter(e.to_string()))
 }
 
 fn get_nv_handle(ctx: &mut Context, nv_index: u32) -> Result<NvIndexHandle, TpmError> {
@@ -69,10 +68,8 @@ pub fn ensure_counter(ctx: &mut Context, nv_index: u32) -> Result<(), TpmError> 
         .build()
         .map_err(|e| TpmError::Counter(e.to_string()))?;
 
-    ctx.execute_with_nullauth_session(|ctx| {
-        ctx.nv_define_space(Provision::Owner, None, nv_public)
-    })
-    .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
+    ctx.execute_with_nullauth_session(|ctx| ctx.nv_define_space(Provision::Owner, None, nv_public))
+        .map_err(|e: tss_esapi::Error| TpmError::Counter(e.to_string()))?;
 
     // NV counters must be incremented once to initialize before they can be read.
     let handle = get_nv_handle(ctx, nv_index)?;

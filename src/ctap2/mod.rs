@@ -1,21 +1,23 @@
-pub(crate) mod types;
+pub(crate) mod attestation;
+pub(crate) mod authenticator_data;
+pub(crate) mod get_assertion;
 pub(crate) mod get_info;
 pub(crate) mod make_credential;
-pub(crate) mod get_assertion;
-pub(crate) mod authenticator_data;
-pub(crate) mod attestation;
+pub(crate) mod types;
 
 pub(crate) use types::Ctap2Error;
 
-use std::sync::{Arc, Mutex};
 use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use tokio::sync::mpsc;
 
-use types::{CTAP2_CMD_GET_INFO, CTAP2_CMD_MAKE_CREDENTIAL, CTAP2_CMD_GET_ASSERTION,
-            MakeCredentialRequest, GetAssertionRequest};
 use crate::ctaphid::channel::Message;
-use crate::tpm::TpmContext;
 use crate::store::CredentialStore;
+use crate::tpm::TpmContext;
+use types::{
+    CTAP2_CMD_GET_ASSERTION, CTAP2_CMD_GET_INFO, CTAP2_CMD_MAKE_CREDENTIAL, GetAssertionRequest,
+    MakeCredentialRequest,
+};
 
 pub(crate) async fn dispatch_cbor(
     msg: Message,
@@ -56,14 +58,30 @@ async fn dispatch_inner(
         CTAP2_CMD_MAKE_CREDENTIAL => {
             let req = MakeCredentialRequest::try_from(cbor_body)?;
             make_credential::handle_make_credential(
-                req, tpm, store, nv_index, pinentry_bin, cid, outgoing_tx, cancel,
-            ).await
+                req,
+                tpm,
+                store,
+                nv_index,
+                pinentry_bin,
+                cid,
+                outgoing_tx,
+                cancel,
+            )
+            .await
         }
         CTAP2_CMD_GET_ASSERTION => {
             let req = GetAssertionRequest::try_from(cbor_body)?;
             get_assertion::handle_get_assertion(
-                req, tpm, store, nv_index, pinentry_bin, cid, outgoing_tx, cancel,
-            ).await
+                req,
+                tpm,
+                store,
+                nv_index,
+                pinentry_bin,
+                cid,
+                outgoing_tx,
+                cancel,
+            )
+            .await
         }
         _ => Err(Ctap2Error::Cbor(format!("unknown cmd {cmd_byte:#04x}"))),
     }

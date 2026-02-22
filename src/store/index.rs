@@ -1,13 +1,13 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use super::{credential::CredentialRecord, disk, StoreError};
+use super::{StoreError, credential::CredentialRecord, disk};
 
 pub struct CredentialStore {
-    aes_key:   [u8; 32],
+    aes_key: [u8; 32],
     creds_dir: PathBuf,
-    by_id:     HashMap<[u8; 32], CredentialRecord>,
-    by_rp:     HashMap<[u8; 32], Vec<[u8; 32]>>,
+    by_id: HashMap<[u8; 32], CredentialRecord>,
+    by_rp: HashMap<[u8; 32], Vec<[u8; 32]>>,
 }
 
 impl CredentialStore {
@@ -30,7 +30,12 @@ impl CredentialStore {
             by_rp.entry(rp).or_default().push(id);
             by_id.insert(id, record);
         }
-        Ok(Self { aes_key, creds_dir, by_id, by_rp })
+        Ok(Self {
+            aes_key,
+            creds_dir,
+            by_id,
+            by_rp,
+        })
     }
 
     /// Add new credential: write to disk and index in memory.

@@ -1,22 +1,19 @@
 pub mod config;
+pub mod ctaphid;
 pub mod diagnostics;
 pub mod error;
 pub mod hid;
-pub mod ctaphid;
 
 pub(crate) mod ctap2;
-pub mod tpm;
 pub mod store;
+pub mod tpm;
 pub(crate) mod up;
 
 pub use up::UserPresenceProof;
 
 pub async fn wipe(cfg: config::Config) -> anyhow::Result<()> {
-    let nv_index = u32::from_str_radix(
-        cfg.nv_index.trim_start_matches("0x"),
-        16,
-    )
-    .map_err(|e| anyhow::anyhow!("invalid --nv-index: {e}"))?;
+    let nv_index = u32::from_str_radix(cfg.nv_index.trim_start_matches("0x"), 16)
+        .map_err(|e| anyhow::anyhow!("invalid --nv-index: {e}"))?;
 
     // Delete credentials
     let data_dir = directories::ProjectDirs::from("", "", "fidorium")
@@ -80,15 +77,16 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
         .write(true)
         .open(&lock_path)?;
     let mut lock = fd_lock::RwLock::new(lock_file);
-    let _guard = lock.try_write()
-        .map_err(|_| anyhow::anyhow!("fidorium is already running (lock: {})", lock_path.display()))?;
+    let _guard = lock.try_write().map_err(|_| {
+        anyhow::anyhow!(
+            "fidorium is already running (lock: {})",
+            lock_path.display()
+        )
+    })?;
 
     // Parse NV index from hex string e.g. "0x01800100"
-    let nv_index = u32::from_str_radix(
-        cfg.nv_index.trim_start_matches("0x"),
-        16,
-    )
-    .map_err(|e| anyhow::anyhow!("invalid --nv-index: {e}"))?;
+    let nv_index = u32::from_str_radix(cfg.nv_index.trim_start_matches("0x"), 16)
+        .map_err(|e| anyhow::anyhow!("invalid --nv-index: {e}"))?;
 
     // Create TPM context and primary key
     let tpm = tpm::TpmContext::new(&cfg.tpm_device)
@@ -117,7 +115,10 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
         store::CredentialStore::load(aes_key, creds_dir)
             .map_err(|e| anyhow::anyhow!("Failed to load credential store: {e}"))?,
     ));
-    tracing::info!(count = store.lock().unwrap().credential_count(), "Credential store loaded");
+    tracing::info!(
+        count = store.lock().unwrap().credential_count(),
+        "Credential store loaded"
+    );
 
     let transport = hid::start_hid_transport()?;
     ctaphid::run_ctaphid_loop(
@@ -127,7 +128,8 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
         store,
         nv_index,
         cfg.pinentry,
-    ).await;
+    )
+    .await;
     match transport.task.await {
         Ok(Ok(())) => {}
         Ok(Err(e)) => return Err(anyhow::anyhow!("HID transport error: {e}")),

@@ -4,11 +4,10 @@ use fidorium::store::CredentialStore;
 use std::sync::{Arc, Mutex};
 use tempfile::TempDir;
 use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 fn try_make_tpm() -> Option<fidorium::tpm::TpmContext> {
-    let tcti = std::env::var("FIDORIUM_TEST_TCTI")
-        .unwrap_or_else(|_| "device:/dev/tpmrm0".into());
+    let tcti = std::env::var("FIDORIUM_TEST_TCTI").unwrap_or_else(|_| "device:/dev/tpmrm0".into());
     fidorium::tpm::TpmContext::new(tcti.trim_start_matches("device:")).ok()
 }
 
@@ -27,16 +26,15 @@ fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
 fn cbor_map_get<'a>(map: &'a [(Value, Value)], key: i64) -> Option<&'a Value> {
     map.iter().find_map(|(k, v)| {
         if let Value::Integer(i) = k {
-            if i128::from(*i) == key as i128 { return Some(v); }
+            if i128::from(*i) == key as i128 {
+                return Some(v);
+            }
         }
         None
     })
 }
 
-async fn run_loop_and_get_response(
-    tpm: fidorium::tpm::TpmContext,
-    payload: &[u8],
-) -> Vec<u8> {
+async fn run_loop_and_get_response(tpm: fidorium::tpm::TpmContext, payload: &[u8]) -> Vec<u8> {
     let tmp = TempDir::new().unwrap();
     let store = Arc::new(Mutex::new(
         CredentialStore::load([0u8; 32], tmp.path().to_path_buf()).unwrap(),
@@ -56,7 +54,11 @@ async fn run_loop_and_get_response(
 
     // Allocate a channel with INIT
     incoming_tx
-        .send(make_init_packet(BROADCAST_CID, CMD_INIT, &[1, 2, 3, 4, 5, 6, 7, 8]))
+        .send(make_init_packet(
+            BROADCAST_CID,
+            CMD_INIT,
+            &[1, 2, 3, 4, 5, 6, 7, 8],
+        ))
         .await
         .unwrap();
     let init_resp = timeout(Duration::from_secs(2), outgoing_rx.recv())
@@ -121,12 +123,18 @@ async fn test_get_info_versions() {
     assert_eq!(body[0], 0x00);
 
     let val: Value = ciborium::from_reader(&body[1..]).unwrap();
-    let Value::Map(map) = val else { panic!("GetInfo response is not a CBOR map") };
+    let Value::Map(map) = val else {
+        panic!("GetInfo response is not a CBOR map")
+    };
 
     // 0x01: versions array must contain "FIDO_2_0"
     let versions = cbor_map_get(&map, 0x01).expect("key 0x01 (versions) missing");
-    let Value::Array(arr) = versions else { panic!("versions is not an array") };
-    let has_fido2 = arr.iter().any(|v| matches!(v, Value::Text(s) if s == "FIDO_2_0"));
+    let Value::Array(arr) = versions else {
+        panic!("versions is not an array")
+    };
+    let has_fido2 = arr
+        .iter()
+        .any(|v| matches!(v, Value::Text(s) if s == "FIDO_2_0"));
     assert!(has_fido2, "versions must contain FIDO_2_0");
 }
 
@@ -141,13 +149,21 @@ async fn test_get_info_aaguid() {
     assert_eq!(body[0], 0x00);
 
     let val: Value = ciborium::from_reader(&body[1..]).unwrap();
-    let Value::Map(map) = val else { panic!("not a map") };
+    let Value::Map(map) = val else {
+        panic!("not a map")
+    };
 
     // 0x03: aaguid must be 16 bytes and match config::AAGUID
     let aaguid_val = cbor_map_get(&map, 0x03).expect("key 0x03 (aaguid) missing");
-    let Value::Bytes(aaguid) = aaguid_val else { panic!("aaguid is not bytes") };
+    let Value::Bytes(aaguid) = aaguid_val else {
+        panic!("aaguid is not bytes")
+    };
     assert_eq!(aaguid.len(), 16, "AAGUID must be 16 bytes");
-    assert_eq!(aaguid.as_slice(), &fidorium::config::AAGUID, "AAGUID must match config");
+    assert_eq!(
+        aaguid.as_slice(),
+        &fidorium::config::AAGUID,
+        "AAGUID must match config"
+    );
 }
 
 #[tokio::test]
@@ -161,16 +177,22 @@ async fn test_get_info_options() {
     assert_eq!(body[0], 0x00);
 
     let val: Value = ciborium::from_reader(&body[1..]).unwrap();
-    let Value::Map(map) = val else { panic!("not a map") };
+    let Value::Map(map) = val else {
+        panic!("not a map")
+    };
 
     // 0x04: options map — rk=true, up=true, uv=false
     let opts_val = cbor_map_get(&map, 0x04).expect("key 0x04 (options) missing");
-    let Value::Map(opts) = opts_val else { panic!("options is not a map") };
+    let Value::Map(opts) = opts_val else {
+        panic!("options is not a map")
+    };
 
     let get_bool = |key: &str| -> Option<bool> {
         opts.iter().find_map(|(k, v)| {
             if let (Value::Text(k), Value::Bool(b)) = (k, v) {
-                if k == key { return Some(*b); }
+                if k == key {
+                    return Some(*b);
+                }
             }
             None
         })

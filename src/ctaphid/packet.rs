@@ -29,7 +29,12 @@ pub fn parse_packet(report: &[u8; 64]) -> Result<Packet, CtapHidError> {
         let bcnt = u16::from_be_bytes([report[5], report[6]]);
         let take = (bcnt as usize).min(INIT_DATA_SIZE);
         let data = report[7..7 + take].to_vec();
-        Ok(Packet::Init(InitPacket { cid, cmd, bcnt, data }))
+        Ok(Packet::Init(InitPacket {
+            cid,
+            cmd,
+            bcnt,
+            data,
+        }))
     } else {
         // Cont packet: bit 7 clear
         let seq = byte4;

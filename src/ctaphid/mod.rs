@@ -13,6 +13,8 @@ pub enum CtapHidError {
     InvalidChannel(u32),
     #[error("Unexpected continuation packet")]
     UnexpectedCont,
+    #[error("Invalid message length: {0}")]
+    InvalidLen(u16),
     #[error("Bad sequence number: {0}")]
     InvalidSeq(u8),
     #[error("Assembly timeout")]

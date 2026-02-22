@@ -1,7 +1,7 @@
+use super::{HidError, report::FIDO_HID_REPORT_DESCRIPTOR};
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use uhid_virt::{Bus, CreateParams, InputEvent, UHID_EVENT_SIZE};
-use super::{HidError, report::FIDO_HID_REPORT_DESCRIPTOR};
 
 /// Open /dev/uhid in blocking mode and register the FIDO HID device.
 /// Returns the raw File so the caller controls the I/O mode.

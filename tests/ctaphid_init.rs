@@ -1,9 +1,9 @@
 use fidorium::ctaphid::{run_ctaphid_loop, types::*};
 use fidorium::store::CredentialStore;
 use std::sync::{Arc, Mutex};
-use tokio::sync::mpsc;
-use tokio::time::{timeout, Duration};
 use tempfile::TempDir;
+use tokio::sync::mpsc;
+use tokio::time::{Duration, timeout};
 
 fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
     let mut pkt = [0u8; 64];
@@ -20,8 +20,7 @@ fn make_init_packet(cid: u32, cmd: u8, payload: &[u8]) -> [u8; 64] {
 /// Try to create a TpmContext for integration tests.
 /// Returns None if the TPM is not accessible (test should be skipped).
 fn try_make_tpm() -> Option<fidorium::tpm::TpmContext> {
-    let tcti = std::env::var("FIDORIUM_TEST_TCTI")
-        .unwrap_or_else(|_| "device:/dev/tpmrm0".into());
+    let tcti = std::env::var("FIDORIUM_TEST_TCTI").unwrap_or_else(|_| "device:/dev/tpmrm0".into());
     let device = tcti.trim_start_matches("device:");
     fidorium::tpm::TpmContext::new(device).ok()
 }
@@ -81,13 +80,22 @@ async fn test_ctaphid_init_returns_cid() {
     // Allocated CID at [15..19]
     let new_cid = u32::from_be_bytes([response[15], response[16], response[17], response[18]]);
     assert_ne!(new_cid, 0, "Allocated CID must not be zero");
-    assert_ne!(new_cid, BROADCAST_CID, "Allocated CID must not be broadcast");
+    assert_ne!(
+        new_cid, BROADCAST_CID,
+        "Allocated CID must not be broadcast"
+    );
 
     // Protocol version
-    assert_eq!(response[19], CTAPHID_PROTOCOL_VERSION, "Protocol version must be 2");
+    assert_eq!(
+        response[19], CTAPHID_PROTOCOL_VERSION,
+        "Protocol version must be 2"
+    );
 
     // Capabilities
-    assert_eq!(response[23], FIDORIUM_CAPABILITIES, "Capabilities must be 0x0C");
+    assert_eq!(
+        response[23], FIDORIUM_CAPABILITIES,
+        "Capabilities must be 0x0C"
+    );
 
     drop(incoming_tx);
 }
@@ -141,7 +149,11 @@ async fn test_ctaphid_ping_echo() {
 
     let bcnt = u16::from_be_bytes([pong[5], pong[6]]) as usize;
     assert_eq!(bcnt, ping_data.len(), "PONG bcnt must match payload length");
-    assert_eq!(&pong[7..7 + bcnt], ping_data, "PONG payload must echo exactly");
+    assert_eq!(
+        &pong[7..7 + bcnt],
+        ping_data,
+        "PONG payload must echo exactly"
+    );
 
     drop(incoming_tx);
 }
@@ -188,9 +200,16 @@ async fn test_ctaphid_invalid_cmd_returns_error() {
         .unwrap();
 
     // CMD = ERROR | 0x80
-    assert_eq!(err_resp[4], CMD_ERROR | 0x80, "Must respond with ERROR command");
+    assert_eq!(
+        err_resp[4],
+        CMD_ERROR | 0x80,
+        "Must respond with ERROR command"
+    );
     // payload[0] = ERR_INVALID_CMD
-    assert_eq!(err_resp[7], ERR_INVALID_CMD, "Error code must be ERR_INVALID_CMD");
+    assert_eq!(
+        err_resp[7], ERR_INVALID_CMD,
+        "Error code must be ERR_INVALID_CMD"
+    );
 
     drop(incoming_tx);
 }

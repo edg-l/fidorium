@@ -1,16 +1,16 @@
-use std::sync::{Arc, Mutex};
-use std::sync::atomic::{AtomicBool, Ordering};
-use tokio::sync::mpsc;
 use super::{
     CtapHidError,
     channel::{ChannelManager, Message},
-    packet::{parse_packet, encode_response, encode_error, Packet},
+    packet::{Packet, encode_error, encode_response, parse_packet},
     types::*,
 };
 use crate::config::MAX_CHANNELS;
 use crate::ctap2;
 use crate::store::CredentialStore;
 use crate::tpm::TpmContext;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use tokio::sync::mpsc;
 
 enum DispatchResult {
     Response(Vec<[u8; 64]>),
@@ -46,7 +46,10 @@ pub async fn run_ctaphid_loop(
             }
             DispatchResult::Cbor(msg) => {
                 if cbor_busy.swap(true, Ordering::Relaxed) {
-                    outgoing_tx.send(encode_error(msg.cid, ERR_CHANNEL_BUSY)).await.ok();
+                    outgoing_tx
+                        .send(encode_error(msg.cid, ERR_CHANNEL_BUSY))
+                        .await
+                        .ok();
                 } else {
                     cancel.store(false, Ordering::Relaxed);
                     let tx = outgoing_tx.clone();
@@ -59,7 +62,8 @@ pub async fn run_ctaphid_loop(
                     tokio::spawn(async move {
                         let response = ctap2::dispatch_cbor(
                             msg, &tpm2, &store2, nv_index, &pin_bin, &tx, &cancel2,
-                        ).await;
+                        )
+                        .await;
                         for pkt in encode_response(cid, CMD_CBOR, &response) {
                             tx.send(pkt).await.ok();
                         }
@@ -96,7 +100,10 @@ fn process_report(
 
             if init.cid == RESERVED_CID {
                 tracing::warn!("Rejected reserved CID");
-                return DispatchResult::Response(vec![encode_error(BROADCAST_CID, ERR_INVALID_CHANNEL)]);
+                return DispatchResult::Response(vec![encode_error(
+                    BROADCAST_CID,
+                    ERR_INVALID_CHANNEL,
+                )]);
             }
             if init.cid != BROADCAST_CID && manager.get(init.cid).is_none() {
                 tracing::warn!(cid = format!("{:#010x}", init.cid), "Unknown CID");
@@ -139,15 +146,15 @@ fn process_report(
 
 fn cmd_name(cmd: u8) -> &'static str {
     match cmd {
-        CMD_PING      => "PING",
-        CMD_MSG       => "MSG",
-        CMD_INIT      => "INIT",
-        CMD_WINK      => "WINK",
-        CMD_CBOR      => "CBOR",
-        CMD_CANCEL    => "CANCEL",
+        CMD_PING => "PING",
+        CMD_MSG => "MSG",
+        CMD_INIT => "INIT",
+        CMD_WINK => "WINK",
+        CMD_CBOR => "CBOR",
+        CMD_CANCEL => "CANCEL",
         CMD_KEEPALIVE => "KEEPALIVE",
-        CMD_ERROR     => "ERROR",
-        _             => "UNKNOWN",
+        CMD_ERROR => "ERROR",
+        _ => "UNKNOWN",
     }
 }
 
@@ -157,14 +164,14 @@ fn dispatch_message(
     cancel: &Arc<AtomicBool>,
 ) -> DispatchResult {
     tracing::debug!(
-        cid  = format!("{:#010x}", msg.cid),
-        cmd  = cmd_name(msg.cmd),
-        len  = msg.payload.len(),
+        cid = format!("{:#010x}", msg.cid),
+        cmd = cmd_name(msg.cmd),
+        len = msg.payload.len(),
         "dispatch"
     );
     match msg.cmd {
-        CMD_INIT   => DispatchResult::Response(handle_init(manager, msg)),
-        CMD_PING   => DispatchResult::Response(handle_ping(msg)),
+        CMD_INIT => DispatchResult::Response(handle_init(manager, msg)),
+        CMD_PING => DispatchResult::Response(handle_ping(msg)),
         CMD_CANCEL => {
             tracing::debug!(cid = format!("{:#010x}", msg.cid), "CANCEL received");
             cancel.store(true, Ordering::Relaxed);
@@ -172,14 +179,17 @@ fn dispatch_message(
         }
         CMD_CBOR => DispatchResult::Cbor(msg),
         CMD_MSG => {
-            tracing::debug!(cid = format!("{:#010x}", msg.cid), "MSG (U2F) -> SW_INS_NOT_SUPPORTED");
+            tracing::debug!(
+                cid = format!("{:#010x}", msg.cid),
+                "MSG (U2F) -> SW_INS_NOT_SUPPORTED"
+            );
             DispatchResult::Response(encode_response(msg.cid, CMD_MSG, &[0x6D, 0x00]))
         }
         cmd => {
             tracing::warn!(
-                cid  = format!("{:#010x}", msg.cid),
-                cmd  = cmd_name(cmd),
-                raw  = format!("{:#04x}", cmd),
+                cid = format!("{:#010x}", msg.cid),
+                cmd = cmd_name(cmd),
+                raw = format!("{:#04x}", cmd),
                 "Unimplemented command"
             );
             DispatchResult::Response(vec![encode_error(msg.cid, ERR_INVALID_CMD)])
@@ -201,9 +211,12 @@ fn handle_init(manager: &mut ChannelManager, msg: Message) -> Vec<[u8; 64]> {
         }
     };
 
-    let nonce_hex: String = msg.payload[..8].iter().map(|b| format!("{b:02x}")).collect();
+    let nonce_hex: String = msg.payload[..8]
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     tracing::info!(
-        cid   = format!("{:#010x}", new_cid),
+        cid = format!("{:#010x}", new_cid),
         nonce = nonce_hex,
         "Allocated new channel"
     );
@@ -234,6 +247,7 @@ fn ctaphid_error_code(e: &CtapHidError) -> u8 {
         CtapHidError::ChannelBusy => ERR_CHANNEL_BUSY,
         CtapHidError::InvalidChannel(_) => ERR_INVALID_CHANNEL,
         CtapHidError::UnexpectedCont => ERR_INVALID_CMD,
+        CtapHidError::InvalidLen(_) => ERR_INVALID_LEN,
         CtapHidError::InvalidSeq(_) => ERR_INVALID_PAR,
         CtapHidError::Timeout => ERR_OTHER,
     }

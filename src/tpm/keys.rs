@@ -1,7 +1,8 @@
-use std::convert::TryFrom;
-use std::convert::TryInto;
+use super::TpmError;
 use sha2::Digest as ShaDigest;
 use sha2::Sha256;
+use std::convert::TryFrom;
+use std::convert::TryInto;
 use tss_esapi::Context;
 use tss_esapi::attributes::ObjectAttributesBuilder;
 use tss_esapi::constants::tss::TPM2_RH_NULL;
@@ -27,7 +28,6 @@ use tss_esapi::structures::SymmetricDefinitionObject;
 use tss_esapi::traits::Marshall;
 use tss_esapi::traits::UnMarshall;
 use tss_esapi::tss2_esys::TPMT_TK_HASHCHECK;
-use super::TpmError;
 
 pub fn create_primary(ctx: &mut Context) -> Result<KeyHandle, TpmError> {
     let ecc_params = PublicEccParametersBuilder::new_restricted_decryption_key(
@@ -70,12 +70,10 @@ pub fn create_child_key(
     primary: KeyHandle,
 ) -> Result<(Vec<u8>, Vec<u8>), TpmError> {
     let scheme = EccScheme::EcDsa(HashScheme::new(HashingAlgorithm::Sha256));
-    let ecc_params = PublicEccParametersBuilder::new_unrestricted_signing_key(
-        scheme,
-        EccCurve::NistP256,
-    )
-    .build()
-    .map_err(|e| TpmError::Key(e.to_string()))?;
+    let ecc_params =
+        PublicEccParametersBuilder::new_unrestricted_signing_key(scheme, EccCurve::NistP256)
+            .build()
+            .map_err(|e| TpmError::Key(e.to_string()))?;
 
     let attrs = ObjectAttributesBuilder::new()
         .with_fixed_tpm(true)
@@ -117,10 +115,9 @@ pub fn load_key(
     private_bytes: &[u8],
     public_bytes: &[u8],
 ) -> Result<KeyHandle, TpmError> {
-    let private = Private::try_from(private_bytes.to_vec())
-        .map_err(|e| TpmError::Key(e.to_string()))?;
-    let public = Public::unmarshall(public_bytes)
-        .map_err(|e| TpmError::Key(e.to_string()))?;
+    let private =
+        Private::try_from(private_bytes.to_vec()).map_err(|e| TpmError::Key(e.to_string()))?;
+    let public = Public::unmarshall(public_bytes).map_err(|e| TpmError::Key(e.to_string()))?;
 
     ctx.execute_with_nullauth_session(|ctx| ctx.load(primary, private, public))
         .map_err(|e: tss_esapi::Error| TpmError::Key(e.to_string()))
@@ -177,8 +174,7 @@ pub fn flush(ctx: &mut Context, handle: KeyHandle) -> Result<(), TpmError> {
 
 /// Extract (x, y) coordinates from a marshalled TPM2B_PUBLIC blob.
 pub fn ecc_public_coords(public_bytes: &[u8]) -> Result<([u8; 32], [u8; 32]), TpmError> {
-    let public = Public::unmarshall(public_bytes)
-        .map_err(|e| TpmError::Key(e.to_string()))?;
+    let public = Public::unmarshall(public_bytes).map_err(|e| TpmError::Key(e.to_string()))?;
 
     match public {
         Public::Ecc { unique, .. } => {

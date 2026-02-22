@@ -1,21 +1,26 @@
 use fidorium::store::{CredentialRecord, CredentialStore};
 
-fn make_record(rp_id: &str, user_id: &[u8], credential_id: &[u8; 32], created_at: u64) -> CredentialRecord {
+fn make_record(
+    rp_id: &str,
+    user_id: &[u8],
+    credential_id: &[u8; 32],
+    created_at: u64,
+) -> CredentialRecord {
     use sha2::{Digest, Sha256};
     let rp_id_hash = Sha256::digest(rp_id.as_bytes()).to_vec();
     CredentialRecord {
-        version:      1,
+        version: 1,
         credential_id: credential_id.to_vec(),
-        rp_id:        rp_id.to_string(),
+        rp_id: rp_id.to_string(),
         rp_id_hash,
-        rp_name:      Some(format!("{rp_id} name")),
-        user_id:      user_id.to_vec(),
-        user_name:    Some("alice".into()),
+        rp_name: Some(format!("{rp_id} name")),
+        user_id: user_id.to_vec(),
+        user_name: Some("alice".into()),
         user_display: Some("Alice".into()),
         public_key_x: vec![0u8; 32],
         public_key_y: vec![1u8; 32],
-        key_private:  vec![2u8; 64],
-        key_public:   vec![3u8; 64],
+        key_private: vec![2u8; 64],
+        key_public: vec![3u8; 64],
         created_at,
         discoverable: true,
     }
@@ -106,12 +111,18 @@ fn test_store_wrong_key_skips_file() {
     let cred_id = [0x55u8; 32];
 
     let mut store = CredentialStore::load(key_a, dir.path().to_path_buf()).unwrap();
-    store.add(make_record("wrong-key.example", b"user", &cred_id, 1_000)).unwrap();
+    store
+        .add(make_record("wrong-key.example", b"user", &cred_id, 1_000))
+        .unwrap();
     drop(store);
 
     // Reload with wrong key — corrupt file should be silently skipped
     let store2 = CredentialStore::load(key_b, dir.path().to_path_buf()).unwrap();
-    assert_eq!(store2.credential_count(), 0, "corrupt (wrong-key) file must be skipped");
+    assert_eq!(
+        store2.credential_count(),
+        0,
+        "corrupt (wrong-key) file must be skipped"
+    );
 }
 
 #[test]
@@ -125,7 +136,11 @@ fn test_store_skips_truncated_bin_file() {
     std::fs::write(&short_path, b"short").unwrap();
 
     let store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
-    assert_eq!(store.credential_count(), 0, "truncated .bin file must be skipped");
+    assert_eq!(
+        store.credential_count(),
+        0,
+        "truncated .bin file must be skipped"
+    );
 }
 
 #[test]
@@ -138,7 +153,11 @@ fn test_store_skips_non_bin_files() {
     std::fs::write(dir.path().join("backup.json"), b"{}").unwrap();
 
     let store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
-    assert_eq!(store.credential_count(), 0, "non-.bin files must be ignored");
+    assert_eq!(
+        store.credential_count(),
+        0,
+        "non-.bin files must be ignored"
+    );
 }
 
 #[test]
@@ -149,13 +168,19 @@ fn test_store_corrupt_bin_file_does_not_affect_valid_ones() {
     let cred_id = [0x77u8; 32];
 
     let mut store = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
-    store.add(make_record("good.example", b"user", &cred_id, 2_000)).unwrap();
+    store
+        .add(make_record("good.example", b"user", &cred_id, 2_000))
+        .unwrap();
     drop(store);
 
     // Drop a garbage .bin file alongside the valid one
     std::fs::write(dir.path().join("garbage.bin"), b"not encrypted").unwrap();
 
     let store2 = CredentialStore::load(key, dir.path().to_path_buf()).unwrap();
-    assert_eq!(store2.credential_count(), 1, "valid credential must still load despite corrupt neighbour");
+    assert_eq!(
+        store2.credential_count(),
+        1,
+        "valid credential must still load despite corrupt neighbour"
+    );
     assert!(store2.get_by_id(&cred_id).is_some());
 }

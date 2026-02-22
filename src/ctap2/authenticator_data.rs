@@ -11,8 +11,8 @@ pub(crate) fn build_make_cred_auth_data(
     let cred_id_len = credential_id.len() as u16;
     let mut data = Vec::new();
     data.extend_from_slice(rp_id_hash);
-    data.push(0x41);  // flags: UP=1, AT=1
-    data.extend_from_slice(&[0, 0, 0, 0]);  // signCount = 0
+    data.push(0x41); // flags: UP=1, AT=1
+    data.extend_from_slice(&[0, 0, 0, 0]); // signCount = 0
     data.extend_from_slice(&crate::config::AAGUID);
     data.extend_from_slice(&cred_id_len.to_be_bytes());
     data.extend_from_slice(credential_id);
@@ -21,13 +21,10 @@ pub(crate) fn build_make_cred_auth_data(
 }
 
 /// Build authenticatorData for GetAssertion (no AT flag).
-pub(crate) fn build_get_assertion_auth_data(
-    rp_id_hash: &[u8; 32],
-    sign_count: u32,
-) -> Vec<u8> {
+pub(crate) fn build_get_assertion_auth_data(rp_id_hash: &[u8; 32], sign_count: u32) -> Vec<u8> {
     let mut data = Vec::new();
     data.extend_from_slice(rp_id_hash);
-    data.push(0x01);  // flags: UP=1
+    data.push(0x01); // flags: UP=1
     data.extend_from_slice(&sign_count.to_be_bytes());
     data
 }
@@ -62,7 +59,9 @@ fn der_integer(n: &[u8]) -> Vec<u8> {
     let n = if n.is_empty() { vec![0u8] } else { n };
     let pad = n[0] & 0x80 != 0;
     let mut out = vec![0x02u8, n.len() as u8 + pad as u8];
-    if pad { out.push(0); }
+    if pad {
+        out.push(0);
+    }
     out.extend_from_slice(&n);
     out
 }
@@ -83,7 +82,11 @@ mod tests {
         assert_eq!(der[0], 0x30, "must start with SEQUENCE tag 0x30");
         // Total inner length
         let inner_len = der[1] as usize;
-        assert_eq!(der.len(), 2 + inner_len, "DER length field must be accurate");
+        assert_eq!(
+            der.len(),
+            2 + inner_len,
+            "DER length field must be accurate"
+        );
         // First INTEGER
         assert_eq!(der[2], 0x02, "r must start with INTEGER tag 0x02");
     }
@@ -113,7 +116,10 @@ mod tests {
         let der = encode_der_ecdsa(&raw);
         assert_eq!(der[2], 0x02, "r must be tagged as INTEGER");
         let r_len = der[3] as usize;
-        assert_eq!(r_len, 1, "leading zeros must be stripped, leaving single byte");
+        assert_eq!(
+            r_len, 1,
+            "leading zeros must be stripped, leaving single byte"
+        );
         assert_eq!(der[4], 0x01);
     }
 
@@ -134,8 +140,8 @@ mod tests {
         let x = [0x11u8; 32];
         let y = [0x22u8; 32];
         let encoded = encode_cose_key(&x, &y);
-        let val: ciborium::value::Value = ciborium::from_reader(encoded.as_slice())
-            .expect("must be valid CBOR");
+        let val: ciborium::value::Value =
+            ciborium::from_reader(encoded.as_slice()).expect("must be valid CBOR");
         assert!(matches!(val, Value::Map(_)), "COSE key must be a CBOR map");
     }
 
@@ -145,12 +151,16 @@ mod tests {
         let y = [0xBBu8; 32];
         let encoded = encode_cose_key(&x, &y);
         let val: ciborium::value::Value = ciborium::from_reader(encoded.as_slice()).unwrap();
-        let Value::Map(map) = val else { panic!("not a map") };
+        let Value::Map(map) = val else {
+            panic!("not a map")
+        };
 
         let get = |key: i64| -> Option<&Value> {
             map.iter().find_map(|(k, v)| {
                 if let Value::Integer(i) = k {
-                    if i128::from(*i) == key as i128 { return Some(v); }
+                    if i128::from(*i) == key as i128 {
+                        return Some(v);
+                    }
                 }
                 None
             })
@@ -176,11 +186,19 @@ mod tests {
         let sign_count: u32 = 42;
         let auth_data = build_get_assertion_auth_data(&rp_id_hash, sign_count);
 
-        assert_eq!(auth_data.len(), 37, "GetAssertion authData must be exactly 37 bytes");
+        assert_eq!(
+            auth_data.len(),
+            37,
+            "GetAssertion authData must be exactly 37 bytes"
+        );
         assert_eq!(&auth_data[0..32], &rp_id_hash, "rpIdHash mismatch");
         assert_eq!(auth_data[32], 0x01, "flags must be 0x01 (UP only)");
-        let count = u32::from_be_bytes([auth_data[33], auth_data[34], auth_data[35], auth_data[36]]);
-        assert_eq!(count, sign_count, "signCount must be big-endian encoded value");
+        let count =
+            u32::from_be_bytes([auth_data[33], auth_data[34], auth_data[35], auth_data[36]]);
+        assert_eq!(
+            count, sign_count,
+            "signCount must be big-endian encoded value"
+        );
     }
 
     // --- build_make_cred_auth_data ---
@@ -194,11 +212,22 @@ mod tests {
         let auth_data = build_make_cred_auth_data(&rp_id_hash, &cred_id, &x, &y);
 
         // Minimum length: 32 + 1 + 4 + 16 + 2 + 32 + cose_key_len
-        assert!(auth_data.len() > 87, "MakeCredential authData must be at least 87 bytes");
+        assert!(
+            auth_data.len() > 87,
+            "MakeCredential authData must be at least 87 bytes"
+        );
         assert_eq!(&auth_data[0..32], &rp_id_hash, "rpIdHash mismatch");
         assert_eq!(auth_data[32], 0x41, "flags must be 0x41 (UP+AT)");
-        assert_eq!(&auth_data[33..37], &[0, 0, 0, 0], "signCount must be 0 for new credential");
-        assert_eq!(&auth_data[37..53], &crate::config::AAGUID, "AAGUID mismatch");
+        assert_eq!(
+            &auth_data[33..37],
+            &[0, 0, 0, 0],
+            "signCount must be 0 for new credential"
+        );
+        assert_eq!(
+            &auth_data[37..53],
+            &crate::config::AAGUID,
+            "AAGUID mismatch"
+        );
         let cred_id_len = u16::from_be_bytes([auth_data[53], auth_data[54]]) as usize;
         assert_eq!(cred_id_len, 32, "credIdLen must be 32");
         assert_eq!(&auth_data[55..87], &cred_id, "credId mismatch");

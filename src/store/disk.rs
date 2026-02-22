@@ -18,13 +18,17 @@ pub(crate) fn write_credential(
     let mut nonce_bytes = [0u8; 12];
     rand::thread_rng().fill_bytes(&mut nonce_bytes);
 
-    let cipher = Aes256Gcm::new_from_slice(aes_key)
-        .map_err(|e| StoreError::Encryption(e.to_string()))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(aes_key).map_err(|e| StoreError::Encryption(e.to_string()))?;
     let ciphertext = cipher
         .encrypt(Nonce::from_slice(&nonce_bytes), buf.as_slice())
         .map_err(|e| StoreError::Encryption(e.to_string()))?;
 
-    let hex: String = record.credential_id.iter().map(|b| format!("{b:02x}")).collect();
+    let hex: String = record
+        .credential_id
+        .iter()
+        .map(|b| format!("{b:02x}"))
+        .collect();
     let path = dir.join(format!("{hex}.bin"));
 
     let mut file_bytes = Vec::with_capacity(12 + ciphertext.len());
@@ -46,8 +50,8 @@ pub(crate) fn read_credential(
     }
     let (nonce_bytes, ciphertext) = bytes.split_at(12);
 
-    let cipher = Aes256Gcm::new_from_slice(aes_key)
-        .map_err(|e| StoreError::Encryption(e.to_string()))?;
+    let cipher =
+        Aes256Gcm::new_from_slice(aes_key).map_err(|e| StoreError::Encryption(e.to_string()))?;
     let plaintext = cipher
         .decrypt(Nonce::from_slice(nonce_bytes), ciphertext)
         .map_err(|e| StoreError::Encryption(e.to_string()))?;

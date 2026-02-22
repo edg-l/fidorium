@@ -1,5 +1,6 @@
-use std::convert::TryFrom;
+use super::TpmError;
 use rand::RngCore;
+use std::convert::TryFrom;
 use tss_esapi::Context;
 use tss_esapi::attributes::ObjectAttributesBuilder;
 use tss_esapi::handles::KeyHandle;
@@ -14,7 +15,6 @@ use tss_esapi::structures::PublicKeyedHashParameters;
 use tss_esapi::structures::SensitiveData;
 use tss_esapi::traits::Marshall;
 use tss_esapi::traits::UnMarshall;
-use super::TpmError;
 
 /// Create a sealed object wrapping a random 32-byte key.
 /// Returns (private_blob, public_blob, key_plaintext).
@@ -25,8 +25,8 @@ pub fn create_seal(
     let mut key = [0u8; 32];
     rand::thread_rng().fill_bytes(&mut key);
 
-    let sensitive = SensitiveData::try_from(key.to_vec())
-        .map_err(|e| TpmError::Seal(e.to_string()))?;
+    let sensitive =
+        SensitiveData::try_from(key.to_vec()).map_err(|e| TpmError::Seal(e.to_string()))?;
 
     let attrs = ObjectAttributesBuilder::new()
         .with_fixed_tpm(true)
@@ -69,10 +69,9 @@ pub fn unseal(
     private_bytes: &[u8],
     public_bytes: &[u8],
 ) -> Result<[u8; 32], TpmError> {
-    let private = Private::try_from(private_bytes.to_vec())
-        .map_err(|e| TpmError::Seal(e.to_string()))?;
-    let public = Public::unmarshall(public_bytes)
-        .map_err(|e| TpmError::Seal(e.to_string()))?;
+    let private =
+        Private::try_from(private_bytes.to_vec()).map_err(|e| TpmError::Seal(e.to_string()))?;
+    let public = Public::unmarshall(public_bytes).map_err(|e| TpmError::Seal(e.to_string()))?;
 
     let sealed_handle = ctx
         .execute_with_nullauth_session(|ctx| ctx.load(primary, private, public))

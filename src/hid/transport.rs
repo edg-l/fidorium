@@ -1,8 +1,8 @@
+use super::{HidError, device::create_uhid_device, report::HID_REPORT_SIZE};
 use std::io::{Read, Write};
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use uhid_virt::{InputEvent, OutputEvent, UHID_EVENT_SIZE};
-use super::{HidError, report::HID_REPORT_SIZE, device::create_uhid_device};
 
 pub struct HidTransport {
     pub incoming_rx: mpsc::Receiver<[u8; HID_REPORT_SIZE]>,
@@ -88,5 +88,9 @@ pub fn start_hid_transport() -> Result<HidTransport, HidError> {
         Ok(())
     });
 
-    Ok(HidTransport { incoming_rx, outgoing_tx, task })
+    Ok(HidTransport {
+        incoming_rx,
+        outgoing_tx,
+        task,
+    })
 }

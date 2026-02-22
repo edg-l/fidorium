@@ -1,11 +1,13 @@
-use std::collections::HashMap;
-use std::time::{Duration, Instant};
-use rand::{Rng, SeedableRng, rngs::StdRng};
 use super::{CtapHidError, types::*};
 use crate::config::CHANNEL_TIMEOUT_SECS;
+use rand::{Rng, SeedableRng, rngs::StdRng};
+use std::collections::HashMap;
+use std::time::{Duration, Instant};
 
 pub enum ChannelState {
-    Idle { last_activity: Instant },
+    Idle {
+        last_activity: Instant,
+    },
     Receiving {
         cmd: u8,
         bcnt: u16,
@@ -13,7 +15,9 @@ pub enum ChannelState {
         next_seq: u8,
         deadline: Instant,
     },
-    Processing { last_activity: Instant },
+    Processing {
+        last_activity: Instant,
+    },
 }
 
 pub struct Message {
@@ -45,7 +49,12 @@ impl ChannelManager {
         loop {
             let cid: u32 = self.rng.r#gen();
             if cid != RESERVED_CID && cid != BROADCAST_CID && !self.channels.contains_key(&cid) {
-                self.channels.insert(cid, ChannelState::Idle { last_activity: Instant::now() });
+                self.channels.insert(
+                    cid,
+                    ChannelState::Idle {
+                        last_activity: Instant::now(),
+                    },
+                );
                 return Ok(cid);
             }
         }
@@ -61,7 +70,9 @@ impl ChannelManager {
 
     pub fn set_idle(&mut self, cid: u32) {
         if let Some(state) = self.channels.get_mut(&cid) {
-            *state = ChannelState::Idle { last_activity: Instant::now() };
+            *state = ChannelState::Idle {
+                last_activity: Instant::now(),
+            };
         }
     }
 
@@ -88,6 +99,10 @@ impl ChannelManager {
         bcnt: u16,
         data: Vec<u8>,
     ) -> Result<Option<Message>, CtapHidError> {
+        if (bcnt as usize) > MAX_MESSAGE_SIZE {
+            return Err(CtapHidError::InvalidLen(bcnt));
+        }
+
         // Broadcast CID is stateless
         if cid == BROADCAST_CID {
             let payload = if bcnt as usize <= data.len() {
@@ -144,7 +159,13 @@ impl ChannelManager {
 
         // Borrow mutably now
         let (cmd, bcnt, is_complete) = match self.channels.get_mut(&cid) {
-            Some(ChannelState::Receiving { cmd, bcnt, data, next_seq, .. }) => {
+            Some(ChannelState::Receiving {
+                cmd,
+                bcnt,
+                data,
+                next_seq,
+                ..
+            }) => {
                 if seq != *next_seq {
                     return Err(CtapHidError::InvalidSeq(seq));
                 }
@@ -166,5 +187,40 @@ impl ChannelManager {
         } else {
             Ok(None)
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_feed_init_rejects_oversized_bcnt() {
+        let mut manager = ChannelManager::new(1);
+        let cid = manager.allocate_cid().unwrap();
+
+        let res = manager.feed_init(
+            cid,
+            CMD_CBOR,
+            (MAX_MESSAGE_SIZE as u16) + 1,
+            vec![0u8; INIT_DATA_SIZE],
+        );
+
+        assert!(matches!(res, Err(CtapHidError::InvalidLen(_))));
+    }
+
+    #[test]
+    fn test_feed_init_accepts_max_sized_bcnt() {
+        let mut manager = ChannelManager::new(1);
+        let cid = manager.allocate_cid().unwrap();
+
+        let res = manager.feed_init(
+            cid,
+            CMD_CBOR,
+            MAX_MESSAGE_SIZE as u16,
+            vec![0u8; INIT_DATA_SIZE],
+        );
+
+        assert!(matches!(res, Ok(None)));
     }
 }

@@ -1,10 +1,10 @@
+use super::prompt::UpPrompt;
+use crate::ctap2::types::Ctap2Error;
+use crate::ctaphid::packet::encode_response;
+use crate::ctaphid::types::CMD_KEEPALIVE;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::sync::mpsc;
-use crate::ctaphid::types::CMD_KEEPALIVE;
-use crate::ctaphid::packet::encode_response;
-use crate::ctap2::types::Ctap2Error;
-use super::prompt::UpPrompt;
 
 pub struct UserPresenceProof {
     pub(crate) _private: (),
@@ -47,14 +47,12 @@ pub(crate) async fn require_user_presence(
                 std::io::ErrorKind::NotFound,
                 "pinentry binary not found",
             ))),
-            Some(mut input) => {
-                input
-                    .with_title(&title)
-                    .with_description(&description)
-                    .with_ok("Confirm")
-                    .with_cancel("Deny")
-                    .interact()
-            }
+            Some(mut input) => input
+                .with_title(&title)
+                .with_description(&description)
+                .with_ok("Confirm")
+                .with_cancel("Deny")
+                .interact(),
         }
     });
 
