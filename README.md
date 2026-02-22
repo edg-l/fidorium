@@ -1,5 +1,11 @@
 # fidorium
 
+[![crates.io](https://img.shields.io/crates/v/fidorium.svg)](https://crates.io/crates/fidorium)
+[![docs.rs](https://img.shields.io/docsrs/fidorium)](https://docs.rs/fidorium)
+[![license](https://img.shields.io/crates/l/fidorium.svg)](https://github.com/edg-l/fidorium#license)
+[![rust edition](https://img.shields.io/badge/rust-2024-edition.svg)](https://doc.rust-lang.org/edition-guide/rust-2024/)
+[![platform](https://img.shields.io/badge/platform-linux-blue.svg)](https://www.kernel.org/)
+
 <p align="center"><img src="logo.svg" width="180" alt="fidorium logo"/></p>
 
 A FIDO2/CTAP2 authenticator daemon for Linux. It presents as a virtual USB HID authenticator via `/dev/uhid`, backed by TPM 2.0 for key storage. Supports passkey registration (MakeCredential) and authentication (GetAssertion). User presence is confirmed via a pinentry popup.
