@@ -51,7 +51,10 @@ async fn test_ctaphid_init_returns_cid() {
         tpm,
         store,
         0x01800100,
-        "pinentry".to_string(),
+        Arc::new(fidorium::UserVerifier::new(
+            "pinentry".to_string(),
+            tmp.path().join("uv_verifier.blob"),
+        )),
     ));
 
     let nonce = [0x01u8, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08];
@@ -118,7 +121,10 @@ async fn test_ctaphid_ping_echo() {
         tpm,
         store,
         0x01800100,
-        "pinentry".to_string(),
+        Arc::new(fidorium::UserVerifier::new(
+            "pinentry".to_string(),
+            tmp.path().join("uv_verifier.blob"),
+        )),
     ));
 
     // First: INIT to get a valid CID
@@ -176,7 +182,10 @@ async fn test_ctaphid_invalid_cmd_returns_error() {
         tpm,
         store,
         0x01800100,
-        "pinentry".to_string(),
+        Arc::new(fidorium::UserVerifier::new(
+            "pinentry".to_string(),
+            tmp.path().join("uv_verifier.blob"),
+        )),
     ));
 
     // INIT first

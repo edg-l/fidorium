@@ -16,11 +16,20 @@ pub(crate) async fn handle_make_credential(
     tpm: &TpmContext,
     store: &Arc<Mutex<CredentialStore>>,
     _nv_index: u32,
-    pinentry_bin: &str,
+    verifier: &crate::up::UserVerifier,
     cid: u32,
     outgoing_tx: &mpsc::Sender<[u8; 64]>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, Ctap2Error> {
+    tracing::debug!(
+        rp_id = %req.rp_id,
+        rk = req.resident_key,
+        // We verify unconditionally, so this records what the client asked for
+        // rather than anything that changes our behavior.
+        requested_uv = req.user_verification,
+        "MakeCredential options"
+    );
+
     // 1. Validate algorithm
     if !req.alg_ok {
         return Err(Ctap2Error::UnsupportedAlgorithm);
@@ -39,16 +48,24 @@ pub(crate) async fn handle_make_credential(
         }
     }
 
-    // 3. User presence
+    // 3. User verification. The pinentry passphrase is checked against a
+    //    TPM-sealed verifier, so one prompt establishes both presence and
+    //    verification — which is what entitles us to set the UV flag below.
     let prompt = crate::up::make_credential_prompt(
         &req.rp_id,
         req.rp_name.as_deref(),
         req.user_display.as_deref(),
         req.user_name.as_deref(),
     );
-    let proof =
-        crate::up::require_user_presence(&prompt, pinentry_bin, outgoing_tx, cid, cancel).await?;
-    tracing::info!(cid = format!("{cid:#010x}"), "User presence confirmed");
+    let proof = verifier
+        .require(&prompt, tpm, outgoing_tx, cid, cancel)
+        .await?;
+    tracing::info!(cid = format!("{cid:#010x}"), "User verified");
+    // Verification actually happened, so report it regardless of whether the
+    // client asked for it — the same way a biometric authenticator does.
+    let uv = true;
+    // Registration always requires a confirmed prompt; there is no silent variant.
+    let auth = crate::up::SignAuth::UserPresent(proof);
 
     // 4. Generate credential ID
     let cred_id: [u8; 32] = rand::thread_rng().r#gen();
@@ -64,11 +81,11 @@ pub(crate) async fn handle_make_credential(
             tpm2.with_ctx(|ctx, primary| {
                 let (priv_bytes, pub_bytes) = tpm::keys::create_child_key(ctx, primary)?;
                 let (x, y) = tpm::keys::ecc_public_coords(&pub_bytes)?;
-                let auth_data = build_make_cred_auth_data(&rp_id_hash2, &cred_id2, &x, &y);
+                let auth_data = build_make_cred_auth_data(&rp_id_hash2, &cred_id2, &x, &y, uv);
                 let mut to_sign = auth_data.clone();
                 to_sign.extend_from_slice(&cdh2);
                 let handle = tpm::keys::load_key(ctx, primary, &priv_bytes, &pub_bytes)?;
-                let raw_sig = tpm::keys::sign(ctx, handle, &to_sign, &proof)?;
+                let raw_sig = tpm::keys::sign(ctx, handle, &to_sign, &auth)?;
                 tpm::keys::flush(ctx, handle)?;
                 Ok((priv_bytes, pub_bytes, x, y, auth_data, raw_sig))
             })

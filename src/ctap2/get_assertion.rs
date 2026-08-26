@@ -36,11 +36,21 @@ pub(crate) async fn handle_get_assertion(
     tpm: &TpmContext,
     store: &Arc<Mutex<CredentialStore>>,
     nv_index: u32,
-    pinentry_bin: &str,
+    verifier: &crate::up::UserVerifier,
     cid: u32,
     outgoing_tx: &mpsc::Sender<[u8; 64]>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, Ctap2Error> {
+    tracing::debug!(
+        rp_id = %req.rp_id,
+        up = req.user_presence,
+        // We verify unconditionally, so this records what the client asked for
+        // rather than anything that changes our behavior.
+        requested_uv = req.user_verification,
+        allow_list = req.allow_list.len(),
+        "GetAssertion options"
+    );
+
     let rp_id_hash: [u8; 32] = Sha256::digest(req.rp_id.as_bytes()).into();
 
     // Find credential
@@ -52,15 +62,37 @@ pub(crate) async fn handle_get_assertion(
         }
     };
 
-    // User presence
-    let prompt = crate::up::get_assertion_prompt(
-        &req.rp_id,
-        cred.user_display.as_deref(),
-        cred.user_name.as_deref(),
-    );
-    let proof =
-        crate::up::require_user_presence(&prompt, pinentry_bin, outgoing_tx, cid, cancel).await?;
-    tracing::info!(cid = format!("{cid:#010x}"), "User presence confirmed");
+    // A request with `up: false` is a silent probe: clients use it to discover
+    // which credentials this authenticator holds before deciding whether to
+    // prompt. It must not show a dialog. We answer the way hardware keys do —
+    // a real assertion with the UP flag clear — because clients distinguish
+    // "credential present" from "absent" purely by success vs CTAP2_ERR_NO_CREDENTIALS.
+    // Reaching this point means a credential matched, so this is the success case.
+    let silent = !req.user_presence;
+    let auth = if silent {
+        tracing::debug!(
+            cid = format!("{cid:#010x}"),
+            "silent getAssertion probe: answering without prompting"
+        );
+        crate::up::SignAuth::Silent
+    } else {
+        // The pinentry passphrase is checked against a TPM-sealed verifier, so
+        // one prompt establishes both presence and verification.
+        let prompt = crate::up::get_assertion_prompt(
+            &req.rp_id,
+            cred.user_display.as_deref(),
+            cred.user_name.as_deref(),
+        );
+        let proof = verifier
+            .require(&prompt, tpm, outgoing_tx, cid, cancel)
+            .await?;
+        tracing::info!(cid = format!("{cid:#010x}"), "User verified");
+        crate::up::SignAuth::UserPresent(proof)
+    };
+
+    // A silent probe asserts neither presence nor verification; a prompted one
+    // always verified, so it reports UV whether or not the client asked.
+    let uv = !silent;
 
     // TPM operations
     let tpm2 = tpm.clone();
@@ -72,13 +104,21 @@ pub(crate) async fn handle_get_assertion(
 
     let (auth_data, der_sig) = tokio::task::spawn_blocking(move || {
         tpm2.with_ctx(|ctx, primary| {
-            let counter = tpm::counter::increment_and_read(ctx, nv_index)?;
-            tracing::info!(count = counter, "Counter incremented");
-            let auth_data = build_get_assertion_auth_data(&rp_id_hash2, counter as u32);
+            // Silent probes must not advance the signature counter: they are not
+            // authentications, and NV counter writes have finite endurance.
+            let counter = if silent {
+                tpm::counter::read_counter(ctx, nv_index)?
+            } else {
+                let c = tpm::counter::increment_and_read(ctx, nv_index)?;
+                tracing::info!(count = c, "Counter incremented");
+                c
+            };
+            let auth_data =
+                build_get_assertion_auth_data(&rp_id_hash2, counter as u32, uv, !silent);
             let mut to_sign = auth_data.clone();
             to_sign.extend_from_slice(&cdh2);
             let handle = tpm::keys::load_key(ctx, primary, &key_private, &key_public)?;
-            let raw_sig = tpm::keys::sign(ctx, handle, &to_sign, &proof)?;
+            let raw_sig = tpm::keys::sign(ctx, handle, &to_sign, &auth)?;
             tpm::keys::flush(ctx, handle)?;
             let der_sig = encode_der_ecdsa(&raw_sig);
             Ok((auth_data, der_sig))

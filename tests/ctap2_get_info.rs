@@ -49,7 +49,10 @@ async fn run_loop_and_get_response(tpm: fidorium::tpm::TpmContext, payload: &[u8
         tpm,
         store,
         0x01800100,
-        "pinentry".to_string(),
+        Arc::new(fidorium::UserVerifier::new(
+            "pinentry".to_string(),
+            tmp.path().join("uv_verifier.blob"),
+        )),
     ));
 
     // Allocate a channel with INIT
@@ -181,7 +184,7 @@ async fn test_get_info_options() {
         panic!("not a map")
     };
 
-    // 0x04: options map — rk=true, up=true, uv=false
+    // 0x04: options map — rk=true, up=true, uv=true
     let opts_val = cbor_map_get(&map, 0x04).expect("key 0x04 (options) missing");
     let Value::Map(opts) = opts_val else {
         panic!("options is not a map")
@@ -200,7 +203,10 @@ async fn test_get_info_options() {
 
     assert_eq!(get_bool("rk"), Some(true), "rk must be true");
     assert_eq!(get_bool("up"), Some(true), "up must be true");
-    assert_eq!(get_bool("uv"), Some(false), "uv must be false");
+    // Built-in user verification via the pinentry passphrase prompt. Relying
+    // parties that request userVerification="required" (e.g. Microsoft) filter
+    // out authenticators that report uv=false.
+    assert_eq!(get_bool("uv"), Some(true), "uv must be true");
 }
 
 #[tokio::test]

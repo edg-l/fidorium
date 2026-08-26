@@ -15,8 +15,8 @@ use crate::ctaphid::channel::Message;
 use crate::store::CredentialStore;
 use crate::tpm::TpmContext;
 use types::{
-    CTAP2_CMD_GET_ASSERTION, CTAP2_CMD_GET_INFO, CTAP2_CMD_MAKE_CREDENTIAL, GetAssertionRequest,
-    MakeCredentialRequest,
+    CTAP2_CMD_GET_ASSERTION, CTAP2_CMD_GET_INFO, CTAP2_CMD_GET_NEXT_ASSERTION,
+    CTAP2_CMD_MAKE_CREDENTIAL, GetAssertionRequest, MakeCredentialRequest,
 };
 
 pub(crate) async fn dispatch_cbor(
@@ -24,11 +24,11 @@ pub(crate) async fn dispatch_cbor(
     tpm: &TpmContext,
     store: &Arc<Mutex<CredentialStore>>,
     nv_index: u32,
-    pinentry_bin: &str,
+    verifier: &crate::up::UserVerifier,
     outgoing_tx: &mpsc::Sender<[u8; 64]>,
     cancel: &Arc<AtomicBool>,
 ) -> Vec<u8> {
-    match dispatch_inner(msg, tpm, store, nv_index, pinentry_bin, outgoing_tx, cancel).await {
+    match dispatch_inner(msg, tpm, store, nv_index, verifier, outgoing_tx, cancel).await {
         Ok(bytes) => bytes,
         Err(e) => {
             tracing::warn!("CTAP2 error: {e}");
@@ -42,7 +42,7 @@ async fn dispatch_inner(
     tpm: &TpmContext,
     store: &Arc<Mutex<CredentialStore>>,
     nv_index: u32,
-    pinentry_bin: &str,
+    verifier: &crate::up::UserVerifier,
     outgoing_tx: &mpsc::Sender<[u8; 64]>,
     cancel: &Arc<AtomicBool>,
 ) -> Result<Vec<u8>, Ctap2Error> {
@@ -62,7 +62,7 @@ async fn dispatch_inner(
                 tpm,
                 store,
                 nv_index,
-                pinentry_bin,
+                verifier,
                 cid,
                 outgoing_tx,
                 cancel,
@@ -76,13 +76,19 @@ async fn dispatch_inner(
                 tpm,
                 store,
                 nv_index,
-                pinentry_bin,
+                verifier,
                 cid,
                 outgoing_tx,
                 cancel,
             )
             .await
         }
-        _ => Err(Ctap2Error::Cbor(format!("unknown cmd {cmd_byte:#04x}"))),
+        // We never return numberOfCredentials > 1, so there is never a next
+        // assertion to fetch. 0x30 is the spec's answer for an unexpected call.
+        CTAP2_CMD_GET_NEXT_ASSERTION => Err(Ctap2Error::NotAllowed),
+        _ => {
+            tracing::warn!(cmd = format!("{cmd_byte:#04x}"), "unknown CTAP2 command");
+            Err(Ctap2Error::InvalidCommand)
+        }
     }
 }

@@ -70,7 +70,7 @@ fn test_child_key_create_load_sign() {
         .with_ctx(tpm::keys::create_child_key)
         .expect("create child key");
 
-    let up = fidorium::UserPresenceProof::test_only();
+    let up = fidorium::SignAuth::UserPresent(fidorium::UserPresenceProof::test_only());
     let sig = ctx
         .with_ctx(|ctx, primary| {
             let key = tpm::keys::load_key(ctx, primary, &priv_bytes, &pub_bytes)?;
@@ -134,4 +134,42 @@ fn test_seal_unseal_roundtrip() {
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+#[test]
+fn test_uv_verifier_accepts_correct_passphrase_and_rejects_wrong() {
+    let Some(tcti) = test_tcti() else { return };
+    let ctx = make_context(&tcti);
+
+    let (private_blob, public_blob) = ctx
+        .with_ctx(|ctx, primary| tpm::seal::create_uv_verifier(ctx, primary, "correct horse"))
+        .expect("create uv verifier");
+
+    let ok = ctx
+        .with_ctx(|ctx, primary| {
+            tpm::seal::verify_passphrase(ctx, primary, &private_blob, &public_blob, "correct horse")
+        })
+        .expect("verifying the correct passphrase must not error");
+    assert!(ok, "correct passphrase must verify");
+
+    // A wrong passphrase must come back as Ok(false) — a clean rejection, not
+    // an Err. Reporting it as an error would mask it as a TPM malfunction.
+    let bad = ctx
+        .with_ctx(|ctx, primary| {
+            tpm::seal::verify_passphrase(ctx, primary, &private_blob, &public_blob, "wrong horse")
+        })
+        .expect("a wrong passphrase must be reported as Ok(false), not Err");
+    assert!(!bad, "wrong passphrase must not verify");
+
+    // The verifier must still work afterwards: a failed attempt must not leave
+    // the object or the TPM in a state that breaks subsequent legitimate use.
+    let still_ok = ctx
+        .with_ctx(|ctx, primary| {
+            tpm::seal::verify_passphrase(ctx, primary, &private_blob, &public_blob, "correct horse")
+        })
+        .expect("verifier must survive a failed attempt");
+    assert!(
+        still_ok,
+        "correct passphrase must still verify after a failure"
+    );
 }
