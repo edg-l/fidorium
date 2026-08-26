@@ -9,7 +9,7 @@ pub mod store;
 pub mod tpm;
 pub(crate) mod up;
 
-pub use up::UserPresenceProof;
+pub use up::{SignAuth, UserPresenceProof, UserVerifier};
 
 pub async fn wipe(cfg: config::Config) -> anyhow::Result<()> {
     let nv_index = u32::from_str_radix(cfg.nv_index.trim_start_matches("0x"), 16)
@@ -121,6 +121,23 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
         "Credential store loaded"
     );
 
+    // User verification: the pinentry passphrase is checked against a TPM-sealed
+    // object. Enrollment is lazy — the first passkey operation sets it — so the
+    // daemon can start at boot with no session available to prompt in.
+    let verifier = std::sync::Arc::new(up::UserVerifier::new(
+        cfg.pinentry,
+        data_dir.join("uv_verifier.blob"),
+        std::time::Duration::from_secs(cfg.uv_cache_secs),
+    ));
+    if verifier.is_enrolled() {
+        tracing::info!(
+            cache_secs = cfg.uv_cache_secs,
+            "User verification passphrase enrolled"
+        );
+    } else {
+        tracing::warn!("No user verification passphrase set; one will be requested on first use");
+    }
+
     let transport = hid::start_hid_transport()?;
     ctaphid::run_ctaphid_loop(
         transport.incoming_rx,
@@ -128,7 +145,7 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
         tpm,
         store,
         nv_index,
-        cfg.pinentry,
+        verifier,
     )
     .await;
     match transport.task.await {

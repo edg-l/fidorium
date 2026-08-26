@@ -14,6 +14,11 @@ pub struct Config {
     pub nv_index: String,
     #[arg(long, default_value = "pinentry")]
     pub pinentry: String,
+    /// Seconds a successful passphrase check stays valid. Within this window
+    /// operations only ask for confirmation, not the passphrase again. Set to 0
+    /// to require the passphrase every time.
+    #[arg(long, default_value_t = 300)]
+    pub uv_cache_secs: u64,
     /// Delete all stored credentials and reset the TPM NV counter, then exit.
     #[arg(long)]
     pub wipe: bool,
