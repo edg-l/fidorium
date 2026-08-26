@@ -54,6 +54,7 @@ async fn test_ctaphid_init_returns_cid() {
         Arc::new(fidorium::UserVerifier::new(
             "pinentry".to_string(),
             tmp.path().join("uv_verifier.blob"),
+            std::time::Duration::from_secs(300),
         )),
     ));
 
@@ -124,6 +125,7 @@ async fn test_ctaphid_ping_echo() {
         Arc::new(fidorium::UserVerifier::new(
             "pinentry".to_string(),
             tmp.path().join("uv_verifier.blob"),
+            std::time::Duration::from_secs(300),
         )),
     ));
 
@@ -185,6 +187,7 @@ async fn test_ctaphid_invalid_cmd_returns_error() {
         Arc::new(fidorium::UserVerifier::new(
             "pinentry".to_string(),
             tmp.path().join("uv_verifier.blob"),
+            std::time::Duration::from_secs(300),
         )),
     ));
 

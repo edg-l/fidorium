@@ -5,8 +5,9 @@ use crate::ctaphid::types::CMD_KEEPALIVE;
 use crate::tpm::TpmContext;
 use secrecy::ExposeSecret;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 use tokio::sync::mpsc;
 
 /// Evidence that the user was verified through pinentry for this operation.
@@ -40,9 +41,17 @@ pub enum SignAuth {
 /// inside the TPM: a wrong passphrase fails `TPM2_Unseal` and increments the
 /// TPM's dictionary-attack counter. Nothing derived from the passphrase is
 /// stored on disk.
+///
+/// After a successful check the verification is cached for a configurable TTL
+/// (`--uv-cache-secs`, default 300). Within that window the user still confirms
+/// each operation — user presence is per-operation and never cached — but is not
+/// asked to retype the passphrase. This mirrors the lifetime CTAP 2.1 gives a
+/// `pinUvAuthToken`. A TTL of zero disables caching entirely.
 pub struct UserVerifier {
     pinentry_bin: String,
     blob_path: PathBuf,
+    cache_ttl: Duration,
+    verified_at: Mutex<Option<Instant>>,
 }
 
 fn encode_keepalive(cid: u32, status: u8) -> [u8; 64] {
@@ -75,11 +84,36 @@ fn decode_blob(bytes: &[u8]) -> Result<(Vec<u8>, Vec<u8>), Ctap2Error> {
 }
 
 impl UserVerifier {
-    pub fn new(pinentry_bin: String, blob_path: PathBuf) -> Self {
+    pub fn new(pinentry_bin: String, blob_path: PathBuf, cache_ttl: Duration) -> Self {
         Self {
             pinentry_bin,
             blob_path,
+            cache_ttl,
+            verified_at: Mutex::new(None),
         }
+    }
+
+    /// Whether a recent verification still stands.
+    ///
+    /// A zero TTL disables caching outright, so every operation asks for the
+    /// passphrase.
+    fn cache_is_valid(&self) -> bool {
+        if self.cache_ttl.is_zero() {
+            return false;
+        }
+        self.verified_at
+            .lock()
+            .unwrap()
+            .is_some_and(|t| t.elapsed() < self.cache_ttl)
+    }
+
+    fn mark_verified(&self) {
+        *self.verified_at.lock().unwrap() = Some(Instant::now());
+    }
+
+    /// Drop any cached verification, forcing the next operation to re-ask.
+    fn invalidate(&self) {
+        *self.verified_at.lock().unwrap() = None;
     }
 
     /// True once a passphrase has been enrolled.
@@ -129,6 +163,13 @@ impl UserVerifier {
     ) -> Result<UserPresenceProof, Ctap2Error> {
         let enrolling = !self.is_enrolled();
 
+        // Already verified recently: still require an explicit confirmation
+        // (user presence is per-operation and never cached), but don't make the
+        // user retype the passphrase.
+        if !enrolling && self.cache_is_valid() {
+            return self.confirm_only(prompt, cancel).await;
+        }
+
         let title = prompt.title.clone();
         let description = if enrolling {
             format!(
@@ -177,6 +218,7 @@ impl UserVerifier {
 
         if enrolling {
             self.enroll(tpm, passphrase).await?;
+            self.mark_verified();
             tracing::info!("Enrolled user verification passphrase");
             return Ok(UserPresenceProof { _private: () });
         }
@@ -198,10 +240,56 @@ impl UserVerifier {
         .map_err(|e| Ctap2Error::Tpm(crate::tpm::TpmError::Other(e.to_string())))??;
 
         if !verified {
+            // A rejected passphrase also drops any cached verification, so a
+            // failed attempt can never leave an easier path open behind it.
+            self.invalidate();
             tracing::warn!("User verification failed: passphrase rejected by TPM");
             return Err(Ctap2Error::UvInvalid);
         }
+        self.mark_verified();
         Ok(UserPresenceProof { _private: () })
+    }
+
+    /// Confirmation-only prompt used while a verification is still cached.
+    async fn confirm_only(
+        &self,
+        prompt: &UpPrompt,
+        cancel: &Arc<AtomicBool>,
+    ) -> Result<UserPresenceProof, Ctap2Error> {
+        let title = prompt.title.clone();
+        let description = prompt.description.clone();
+        let bin = self.pinentry_bin.clone();
+
+        let join = tokio::task::spawn_blocking(move || {
+            let Some(mut dialog) = pinentry::ConfirmationDialog::with_binary(&bin) else {
+                return Err(pinentry::Error::Io(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    "pinentry binary not found",
+                )));
+            };
+            dialog
+                .with_title(&title)
+                .with_ok("Confirm")
+                .with_cancel("Deny");
+            dialog.confirm(&description)
+        });
+
+        let result = tokio::time::timeout(std::time::Duration::from_secs(30), join).await;
+
+        if cancel.load(Ordering::Relaxed) {
+            return Err(Ctap2Error::KeepaliveCancel);
+        }
+
+        match result {
+            Err(_) => Err(Ctap2Error::UserActionTimeout),
+            Ok(Err(_)) | Ok(Ok(Err(_))) => Err(Ctap2Error::OperationDenied),
+            // `confirm` returns Ok(false) when the user picks Deny.
+            Ok(Ok(Ok(false))) => Err(Ctap2Error::OperationDenied),
+            Ok(Ok(Ok(true))) => {
+                tracing::debug!("User presence confirmed against cached verification");
+                Ok(UserPresenceProof { _private: () })
+            }
+        }
     }
 
     async fn enroll(&self, tpm: &TpmContext, passphrase: String) -> Result<(), Ctap2Error> {
@@ -268,10 +356,56 @@ mod tests {
         );
     }
 
+    fn verifier(ttl: Duration) -> (UserVerifier, tempfile::TempDir) {
+        let tmp = tempfile::TempDir::new().unwrap();
+        let v = UserVerifier::new("pinentry".into(), tmp.path().join("uv_verifier.blob"), ttl);
+        (v, tmp)
+    }
+
     #[test]
     fn test_not_enrolled_when_blob_absent() {
-        let tmp = tempfile::TempDir::new().unwrap();
-        let v = UserVerifier::new("pinentry".into(), tmp.path().join("uv_verifier.blob"));
+        let (v, _tmp) = verifier(Duration::from_secs(300));
         assert!(!v.is_enrolled());
+    }
+
+    #[test]
+    fn test_cache_invalid_until_verified() {
+        let (v, _tmp) = verifier(Duration::from_secs(300));
+        assert!(!v.cache_is_valid(), "nothing verified yet");
+        v.mark_verified();
+        assert!(
+            v.cache_is_valid(),
+            "cache must hold after a successful check"
+        );
+    }
+
+    #[test]
+    fn test_cache_expires() {
+        let (v, _tmp) = verifier(Duration::from_millis(50));
+        v.mark_verified();
+        assert!(v.cache_is_valid());
+        std::thread::sleep(Duration::from_millis(80));
+        assert!(!v.cache_is_valid(), "cache must expire after its TTL");
+    }
+
+    #[test]
+    fn test_zero_ttl_disables_cache() {
+        let (v, _tmp) = verifier(Duration::ZERO);
+        v.mark_verified();
+        assert!(
+            !v.cache_is_valid(),
+            "a zero TTL must require the passphrase every time"
+        );
+    }
+
+    #[test]
+    fn test_invalidate_clears_cache() {
+        let (v, _tmp) = verifier(Duration::from_secs(300));
+        v.mark_verified();
+        v.invalidate();
+        assert!(
+            !v.cache_is_valid(),
+            "a rejected passphrase must not leave a usable cache behind"
+        );
     }
 }

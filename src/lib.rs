@@ -127,9 +127,13 @@ pub async fn run(cfg: config::Config) -> anyhow::Result<()> {
     let verifier = std::sync::Arc::new(up::UserVerifier::new(
         cfg.pinentry,
         data_dir.join("uv_verifier.blob"),
+        std::time::Duration::from_secs(cfg.uv_cache_secs),
     ));
     if verifier.is_enrolled() {
-        tracing::info!("User verification passphrase enrolled");
+        tracing::info!(
+            cache_secs = cfg.uv_cache_secs,
+            "User verification passphrase enrolled"
+        );
     } else {
         tracing::warn!("No user verification passphrase set; one will be requested on first use");
     }

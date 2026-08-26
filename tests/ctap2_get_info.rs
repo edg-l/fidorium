@@ -52,6 +52,7 @@ async fn run_loop_and_get_response(tpm: fidorium::tpm::TpmContext, payload: &[u8
         Arc::new(fidorium::UserVerifier::new(
             "pinentry".to_string(),
             tmp.path().join("uv_verifier.blob"),
+            std::time::Duration::from_secs(300),
         )),
     ));
 
