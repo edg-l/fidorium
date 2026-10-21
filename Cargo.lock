@@ -488,6 +488,7 @@ dependencies = [
  "fd-lock",
  "pinentry",
  "rand",
+ "secrecy",
  "serde",
  "sha2",
  "tempfile",

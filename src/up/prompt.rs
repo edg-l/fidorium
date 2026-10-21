@@ -3,6 +3,13 @@ pub(crate) struct UpPrompt {
     pub description: String,
 }
 
+pub(crate) fn touch_prompt() -> UpPrompt {
+    UpPrompt {
+        title: "fidorium".to_string(),
+        description: "A website is asking you to choose a security key.\n\nPress Confirm to use fidorium, or Deny to skip it.".to_string(),
+    }
+}
+
 pub(crate) fn make_credential_prompt(
     rp_id: &str,
     rp_name: Option<&str>,

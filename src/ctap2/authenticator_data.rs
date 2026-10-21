@@ -1,17 +1,25 @@
 use ciborium::value::Value;
 
+pub(crate) const FLAG_UP: u8 = 0x01;
+pub(crate) const FLAG_UV: u8 = 0x04;
+pub(crate) const FLAG_AT: u8 = 0x40;
+
 /// Build authenticatorData for MakeCredential (AT=1 flag, includes credential data).
+///
+/// `uv` sets the user-verification flag; relying parties that request
+/// `userVerification: "required"` reject an assertion without it.
 pub(crate) fn build_make_cred_auth_data(
     rp_id_hash: &[u8; 32],
     credential_id: &[u8],
     public_key_x: &[u8; 32],
     public_key_y: &[u8; 32],
+    uv: bool,
 ) -> Vec<u8> {
     let cose_key = encode_cose_key(public_key_x, public_key_y);
     let cred_id_len = credential_id.len() as u16;
     let mut data = Vec::new();
     data.extend_from_slice(rp_id_hash);
-    data.push(0x41); // flags: UP=1, AT=1
+    data.push(FLAG_UP | FLAG_AT | if uv { FLAG_UV } else { 0 });
     data.extend_from_slice(&[0, 0, 0, 0]); // signCount = 0
     data.extend_from_slice(&crate::config::AAGUID);
     data.extend_from_slice(&cred_id_len.to_be_bytes());
@@ -21,10 +29,18 @@ pub(crate) fn build_make_cred_auth_data(
 }
 
 /// Build authenticatorData for GetAssertion (no AT flag).
-pub(crate) fn build_get_assertion_auth_data(rp_id_hash: &[u8; 32], sign_count: u32) -> Vec<u8> {
+///
+/// `up` is false only for silent probes (`options.up = false`), where the spec
+/// requires the user-presence flag to be clear.
+pub(crate) fn build_get_assertion_auth_data(
+    rp_id_hash: &[u8; 32],
+    sign_count: u32,
+    uv: bool,
+    up: bool,
+) -> Vec<u8> {
     let mut data = Vec::new();
     data.extend_from_slice(rp_id_hash);
-    data.push(0x01); // flags: UP=1
+    data.push(if up { FLAG_UP } else { 0 } | if uv { FLAG_UV } else { 0 });
     data.extend_from_slice(&sign_count.to_be_bytes());
     data
 }
@@ -184,7 +200,7 @@ mod tests {
     fn test_get_assertion_auth_data_layout() {
         let rp_id_hash = [0xABu8; 32];
         let sign_count: u32 = 42;
-        let auth_data = build_get_assertion_auth_data(&rp_id_hash, sign_count);
+        let auth_data = build_get_assertion_auth_data(&rp_id_hash, sign_count, false, true);
 
         assert_eq!(
             auth_data.len(),
@@ -209,7 +225,7 @@ mod tests {
         let cred_id = [0x77u8; 32];
         let x = [0x11u8; 32];
         let y = [0x22u8; 32];
-        let auth_data = build_make_cred_auth_data(&rp_id_hash, &cred_id, &x, &y);
+        let auth_data = build_make_cred_auth_data(&rp_id_hash, &cred_id, &x, &y, false);
 
         // Minimum length: 32 + 1 + 4 + 16 + 2 + 32 + cose_key_len
         assert!(
@@ -231,5 +247,35 @@ mod tests {
         let cred_id_len = u16::from_be_bytes([auth_data[53], auth_data[54]]) as usize;
         assert_eq!(cred_id_len, 32, "credIdLen must be 32");
         assert_eq!(&auth_data[55..87], &cred_id, "credId mismatch");
+    }
+
+    // --- UV flag ---
+
+    #[test]
+    fn test_silent_probe_clears_up_and_uv_flags() {
+        // A silent probe (options.up = false) must produce an assertion with the
+        // UP flag clear; relying parties reject those, which is what makes it
+        // safe to sign without a prompt.
+        let auth_data = build_get_assertion_auth_data(&[0u8; 32], 1, false, false);
+        assert_eq!(
+            auth_data[32], 0x00,
+            "silent assertion must assert neither presence nor verification"
+        );
+        assert_eq!(auth_data[32] & FLAG_UP, 0, "UP must be clear");
+    }
+
+    #[test]
+    fn test_uv_flag_set_when_user_verified() {
+        let auth_data = build_get_assertion_auth_data(&[0u8; 32], 1, true, true);
+        assert_eq!(
+            auth_data[32] & FLAG_UV,
+            FLAG_UV,
+            "UV bit must be set when user verification was performed"
+        );
+        assert_eq!(auth_data[32], 0x05, "flags must be UP|UV");
+
+        let auth_data =
+            build_make_cred_auth_data(&[0u8; 32], &[0u8; 32], &[0u8; 32], &[0u8; 32], true);
+        assert_eq!(auth_data[32], 0x45, "flags must be UP|UV|AT");
     }
 }

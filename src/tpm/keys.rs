@@ -125,13 +125,14 @@ pub fn load_key(
 
 /// Sign `data` with the loaded key.
 /// Returns raw (r, s) concatenated — 64 bytes, each component zero-padded to 32 bytes.
-/// The `_up` parameter is a user presence proof token, ensuring this function
-/// is only callable after user presence has been confirmed.
+/// The `_auth` parameter records why signing is permitted, ensuring this function
+/// is only reachable after user presence has been confirmed or via an explicitly
+/// marked silent probe (which must not assert user presence).
 pub fn sign(
     ctx: &mut Context,
     key: KeyHandle,
     data: &[u8],
-    _up: &crate::up::UserPresenceProof,
+    _auth: &crate::up::SignAuth,
 ) -> Result<[u8; 64], TpmError> {
     let hash_bytes: [u8; 32] = Sha256::digest(data).into();
     let digest = Digest::try_from(hash_bytes.to_vec()).map_err(|e| TpmError::Key(e.to_string()))?;

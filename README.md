@@ -66,6 +66,7 @@ The daemon runs in the foreground. Kill it with Ctrl-C to stop.
 | `--tpm-device` | `/dev/tpmrm0` | TPM device path |
 | `--nv-index` | `0x01800100` | TPM NV counter index (hex) |
 | `--pinentry` | `pinentry` | pinentry binary name or path |
+| `--uv-cache-secs` | `300` | Seconds a passphrase check stays valid; `0` to ask every time |
 | `--wipe` | — | Delete all credentials and reset NV counter, then exit |
 
 ## Data Storage
@@ -74,6 +75,7 @@ The daemon runs in the foreground. Kill it with Ctrl-C to stop.
 |------|----------|
 | `~/.local/share/fidorium/credentials/` | Encrypted credential blobs |
 | `~/.local/share/fidorium/seal_key.blob` | TPM-sealed AES encryption key |
+| `~/.local/share/fidorium/uv_verifier.blob` | TPM-sealed user verification object |
 
 Credential files are AES-256-GCM encrypted with a key sealed to the TPM. They are useless without access to the same TPM.
 
@@ -88,7 +90,9 @@ Security properties:
 - Key material never leaves the TPM unencrypted.
 - The monotonic NV counter in TPM storage prevents cloning-detection rollback.
 - User presence confirmation is enforced at the type level (`UserPresenceProof`) — the signing path cannot be reached without pinentry approval.
-- No PIN or UV — user presence only (pinentry serves as the "tap to confirm" equivalent).
+- User verification is a passphrase held as the authValue of a TPM-sealed object, so the check happens inside the TPM and nothing derived from the passphrase is stored on disk. A wrong passphrase increments the TPM's dictionary-attack counter, which means repeated wrong guesses will eventually trip TPM lockout (clear it with `tpm2_dictionarylockout --clear-lockout`).
+- The passphrase is enrolled on first use. Deleting `uv_verifier.blob` re-enrolls without touching credentials, so protect the data directory accordingly.
+- After a successful check, verification is cached for `--uv-cache-secs`. Presence is still confirmed per operation; only the passphrase is skipped.
 
 ## Testing
 

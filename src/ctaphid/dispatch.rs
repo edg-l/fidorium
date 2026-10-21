@@ -23,7 +23,7 @@ pub async fn run_ctaphid_loop(
     tpm: TpmContext,
     store: Arc<Mutex<CredentialStore>>,
     nv_index: u32,
-    pinentry_bin: String,
+    verifier: Arc<crate::up::UserVerifier>,
 ) {
     let mut manager = ChannelManager::new(MAX_CHANNELS);
     let cancel = Arc::new(AtomicBool::new(false));
@@ -57,13 +57,20 @@ pub async fn run_ctaphid_loop(
                     let store2 = Arc::clone(&store);
                     let cancel2 = Arc::clone(&cancel);
                     let busy2 = Arc::clone(&cbor_busy);
-                    let pin_bin = pinentry_bin.clone();
+                    let verifier2 = Arc::clone(&verifier);
                     let cid = msg.cid;
                     tokio::spawn(async move {
                         let response = ctap2::dispatch_cbor(
-                            msg, &tpm2, &store2, nv_index, &pin_bin, &tx, &cancel2,
+                            msg, &tpm2, &store2, nv_index, &verifier2, &tx, &cancel2,
                         )
                         .await;
+
+                        tracing::debug!(
+                            cid = format!("{:#010x}", cid),
+                            response = ?response,
+                            "CTAP2 response"
+                        );
+
                         for pkt in encode_response(cid, CMD_CBOR, &response) {
                             tx.send(pkt).await.ok();
                         }
@@ -167,6 +174,7 @@ fn dispatch_message(
         cid = format!("{:#010x}", msg.cid),
         cmd = cmd_name(msg.cmd),
         len = msg.payload.len(),
+        payload = ?msg.payload,
         "dispatch"
     );
     match msg.cmd {
